@@ -1,4 +1,4 @@
-:root { color-scheme: dark; --bg: #000; --fg: #8a8a8a; --accent: #3a7; --error: #e55; --line: #222; }
+:root { color-scheme: dark; --bg: #000; --fg: #8a8a8a; --accent: #3a7; --error: #b7f; --junk: #e33; --line: #222; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
 button, select { font: inherit; font-size: .85rem; color: #ccc; background: #111; border: 1px solid #333;
@@ -44,6 +44,13 @@ body.debug .panel.debug-only { display: grid; grid-template-columns: minmax(0, 1
 #phase[data-phase="stabilizing"] { border-color: #fb3; color: #fd7; }
 #phase[data-phase="stabilized"], #phase[data-phase="sent"] { border-color: #3c6; color: #7e9; }
 #phase[data-phase="stabilized"] #phase-fill, #phase[data-phase="sent"] #phase-fill { background: #3c6; }
+/* After pricing: red = not resalable, purple = error, gray = priced but quiet. */
+#phase[data-result="junk"] { border-color: var(--junk); color: #f88; background: rgba(60, 0, 0, .75); }
+#phase[data-result="junk"] #phase-fill { background: var(--junk); }
+#phase[data-result="error"] { border-color: var(--error); color: #d6b8ff; }
+#phase[data-result="error"] #phase-fill { background: var(--error); }
+#phase[data-result="quiet"] { border-color: #777; color: #bbb; }
+#phase[data-result="quiet"] #phase-fill { background: #777; }
 #stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
 #stats dt { color: #666; }
 #stats dd { margin: 0; color: #ccc; overflow-wrap: anywhere; }
@@ -77,7 +84,9 @@ tr.error td:first-child { border-left: 3px solid var(--error); }
 tr.quiet { color: #888; }
 .pill { display: inline-block; padding: 0 .5rem; border-radius: 999px; font-size: .75rem; background: #222; }
 tr.spoke .pill { background: #143; color: #7e9; }
-tr.error .pill { background: #411; color: #f99; }
+tr.error .pill { background: #2a1a40; color: #d6b8ff; }
+tr.junk td:first-child { border-left: 3px solid var(--junk); }
+tr.junk .pill { background: #411; color: #f99; }
 .src a { color: #8ab; display: block; overflow-wrap: anywhere; }
 .line { font-style: italic; }
 @media (max-width: 700px) { .opt { display: none; } }

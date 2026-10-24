@@ -8,7 +8,9 @@
   const DETECT_PX = 320;         // YOLO input edge
   const DETECT_MS = 100;         // pause between detect calls
   const CAPTION_MS = 6000;       // whisper caption stays this long
-  const COLORS = { spoke: '#3c6', quiet: '#999', error: '#e55' };
+  // Result colors: red means Jev judged it not resalable; errors are purple so they don't read as junk.
+  const COLORS = { spoke: '#3c6', quiet: '#999', junk: '#e33', error: '#b7f' };
+  const NOT_RESALABLE = 'not resalable'; // the pipeline's reason when Jev stops an object
   const PHASE_COLORS = { stabilizing: '#fb3', stabilized: '#3c6', sent: '#3c6' };
   const HOLD_S = (Stabilize.HOLD_MS / 1000).toFixed(1);
 
@@ -47,6 +49,7 @@
   let muted = false;
   let lastLine = '';
   let lastResult = '';           // what the backend said about the object just sent
+  let result = null;             // { kind, name, reason } for the badge: spoke | quiet | junk | error
   let captionTimer = null;
   let scan = { phase: 'searching', target: null, progress: 0 };
   const stats = { sent: 0, spoke: 0, errors: 0, rtt: null, lastError: '' };
@@ -111,6 +114,7 @@
     inFlight = true;
     stats.sent++;
     lastResult = '';
+    result = null;
     setStatus('Stabilized: ' + (target ? target.label : 'frame') + ', pricing…');
     renderStats();
     const t0 = performance.now();
@@ -131,14 +135,18 @@
         speak(reply.speak);
       }
       const o = objects[0];
+      result = o ? { kind: outcome(o), name: o.item || o.label, reason: o.reason } : null;
       lastResult = reply.speak ? 'spoke: ' + reply.speak
-        : o ? (o.item || o.label) + ': ' + o.decision + ' (' + o.reason + ')' : 'nothing to price';
+        : !o ? 'nothing to price'
+          : result.kind === 'junk' ? result.name + ': not resalable'
+            : result.name + ': ' + o.decision + ' (' + o.reason + ')';
       drawDecisions(objects);
       if (debug) LogView.refresh();
     } catch (e) {
       stats.errors++;
       stats.lastError = e.message;
       lastResult = 'error: ' + e.message;
+      result = { kind: 'error', name: target ? target.label : 'frame', reason: e.message };
     } finally {
       inFlight = false;
       setStatus(lastResult);
@@ -157,7 +165,10 @@
   function onDetections(dets, now) {
     const wasSent = scan.phase === 'sent';
     scan = stabilizer.update(dets, now);
-    if (wasSent && scan.phase !== 'sent') clearDecisions(); // a new object (or none): drop the old result
+    if (wasSent && scan.phase !== 'sent') { // a new object (or none): drop the old result
+      clearDecisions();
+      result = null;
+    }
     if (scan.phase === 'stabilized' && !inFlight) {
       stabilizer.markSent();
       sendFrame(scan.target);
@@ -179,14 +190,24 @@
     }
   }
 
+  const RESULT_TEXT = {
+    spoke: (r) => 'Worth it: ' + r.name,
+    junk: (r) => 'Not resalable: ' + r.name,
+    quiet: (r) => r.name + ': ' + r.reason,
+    error: (r) => 'Error: ' + r.name,
+  };
+
   function renderPhase() {
     const { phase, target, progress } = scan;
     phaseEl.hidden = !live;
+    const done = phase === 'sent' && !inFlight && result;
     phaseEl.dataset.phase = phase;
+    phaseEl.dataset.result = done ? result.kind : '';
     $('phase-text').textContent =
       phase === 'searching' ? 'Searching'
         : phase === 'stabilizing' ? 'Stabilizing ' + target.label + ' ' + pct(progress)
-          : 'Stabilized: ' + target.label + (inFlight || phase === 'stabilized' ? ' · pricing…' : ' · sent');
+          : !done ? 'Stabilized: ' + target.label + (inFlight || phase === 'stabilized' ? ' · pricing…' : ' · sent')
+            : RESULT_TEXT[result.kind](result);
     $('phase-fill').style.width = pct(phase === 'searching' ? 0 : progress);
   }
 
@@ -259,6 +280,11 @@
     drawBox(ctx, t.box, label, PHASE_COLORS[scan.phase], 3, scan.progress);
   }
 
+  function outcome(o) {
+    if (o.decision === 'spoke' || o.decision === 'error') return o.decision;
+    return o.reason === NOT_RESALABLE ? 'junk' : 'quiet';
+  }
+
   function drawDecisions(objects) {
     const ctx = fit(decisions);
     decisions.dataset.drawn = objects.length ? '1' : '';
@@ -268,7 +294,7 @@
       const reason = o.decision === 'error' ? o.reason.split(':')[0] : o.reason;
       let text = (o.item || o.label) + ' · ' + reason;
       if (o.decision === 'spoke') text += ' · $' + Math.round(o.low) + '–$' + Math.round(o.high);
-      drawBox(ctx, o.box, text, COLORS[o.decision] || COLORS.quiet, 3);
+      drawBox(ctx, o.box, text, COLORS[outcome(o)], outcome(o) === 'junk' ? 4 : 3);
     }
   }
 

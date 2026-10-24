@@ -1,0 +1,28 @@
+:root { color-scheme: dark; --bg: #000; --fg: #8a8a8a; --accent: #3a7; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+
+/* Capture page: the wearer never looks at it, so keep it nearly black. */
+body.capture { height: 100vh; display: grid; place-items: center; }
+body.capture main { text-align: center; }
+#start { font: inherit; font-size: 1.5rem; padding: 1rem 2.5rem; border-radius: 999px;
+  border: 1px solid #333; background: #111; color: var(--fg); }
+#start[hidden] { display: none; }
+#status { margin: 1rem 0 0; font-size: .8rem; opacity: .5; }
+#video { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* Judge page */
+body.judge { padding: 16px; max-width: 1100px; margin: 0 auto; color: #ddd; }
+body.judge h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+body.judge .sub { margin: 0 0 1rem; color: #888; font-size: .85rem; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #222; vertical-align: top; }
+th { color: #888; font-weight: 500; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+tr.spoke td:first-child { border-left: 3px solid var(--accent); }
+tr.quiet { color: #888; }
+.pill { display: inline-block; padding: 0 .5rem; border-radius: 999px; font-size: .75rem; background: #222; }
+tr.spoke .pill { background: #143; color: #7e9; }
+.src a { color: #8ab; display: block; overflow-wrap: anywhere; }
+.line { font-style: italic; }
+#empty { color: #666; padding: 2rem 0; }
+@media (max-width: 700px) { .hide-sm { display: none; } }

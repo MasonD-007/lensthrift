@@ -27,6 +27,9 @@ final class CameraModel: ObservableObject {
     @Published private(set) var detectFrameSize: CGSize?
     @Published private(set) var detectLatencyMs: Int?
     @Published private(set) var backendError: String?
+    /// What the pipeline last said, or why it stayed quiet.
+    @Published private(set) var lastReply: String?
+    @Published private(set) var frameLatencyMs: Int?
 
     /// The backend wants about one frame per second (see Plan.md).
     static let interval: Duration = .seconds(1)
@@ -41,6 +44,9 @@ final class CameraModel: ObservableObject {
     private var liveTask: Task<Void, Never>?
     private var detectTask: Task<Void, Never>?
     private var isCapturing = false
+    /// One /api/frame call at a time; frames saved meanwhile aren't sent.
+    private var isPricing = false
+    private let speaker = Speaker()
 
     func start() async {
         guard await AVCaptureDevice.requestAccess(for: .video) else {
@@ -163,9 +169,32 @@ final class CameraModel: ObservableObject {
             lastSize = saved.pixelSize
             savedCount += 1
             status = "Saved \(saved.url.lastPathComponent)"
-            // TODO: POST saved.url's JPEG to the backend (SAM 3 / Gemini) once its endpoint exists.
+            if isLive, !isPricing {
+                Task { await price(saved.url) }
+            }
         } catch {
             status = "Capture failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Sends a saved frame through the backend pipeline and speaks the answer, if any.
+    private func price(_ url: URL) async {
+        guard let client = BackendClient(), let jpeg = try? Data(contentsOf: url) else { return }
+        isPricing = true
+        defer { isPricing = false }
+        let started = ContinuousClock.now
+        do {
+            let reply = try await client.frame(jpeg: jpeg)
+            frameLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
+            if reply.speak.isEmpty {
+                lastReply = "Quiet (\(reply.objects ?? 0) objects)"
+            } else {
+                lastReply = "“\(reply.speak)”"
+                // Capture may have been stopped while the reply was on its way.
+                if isLive { speaker.say(reply.speak) }
+            }
+        } catch {
+            lastReply = "Pricing failed: \(error.localizedDescription)"
         }
     }
 

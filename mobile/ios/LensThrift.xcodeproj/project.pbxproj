@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04CC30F43867C66CC8B9A1D5 /* Speaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C78E4A70B32287AC5B15C65D /* Speaker.swift */; };
 		53C9C41D5460CED3966EA602 /* BackendClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E79FB0485E3CBE001C1E1E5 /* BackendClient.swift */; };
 		A702DFF0341DBECD3EB24925 /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8EDB244A75413174AF03D60 /* GalleryView.swift */; };
 		B43BB27DE0CC5D0D1E013955 /* SharpFramePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001D0394353FDE0BCB3ACB5B /* SharpFramePicker.swift */; };
@@ -29,6 +30,7 @@
 		8E79FB0485E3CBE001C1E1E5 /* BackendClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendClient.swift; sourceTree = "<group>"; };
 		9613317E237BAE3C5648D897 /* CaptureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureStore.swift; sourceTree = "<group>"; };
 		A095FCB4C9B4DEB3A0215FE5 /* PhotoTaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTaker.swift; sourceTree = "<group>"; };
+		C78E4A70B32287AC5B15C65D /* Speaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Speaker.swift; sourceTree = "<group>"; };
 		E8EDB244A75413174AF03D60 /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
 		F5231779500905A8E6B8D060 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -58,6 +60,7 @@
 				3D97CB9F7F370CA3B7F9F237 /* LensThriftApp.swift */,
 				A095FCB4C9B4DEB3A0215FE5 /* PhotoTaker.swift */,
 				001D0394353FDE0BCB3ACB5B /* SharpFramePicker.swift */,
+				C78E4A70B32287AC5B15C65D /* Speaker.swift */,
 			);
 			path = LensThrift;
 			sourceTree = "<group>";
@@ -151,6 +154,7 @@
 				D65F2E7557CA67C582C7C9E6 /* LensThriftApp.swift in Sources */,
 				E5C93B77FDF9727F2438E6A6 /* PhotoTaker.swift in Sources */,
 				B43BB27DE0CC5D0D1E013955 /* SharpFramePicker.swift in Sources */,
+				04CC30F43867C66CC8B9A1D5 /* Speaker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

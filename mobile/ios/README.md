@@ -22,6 +22,12 @@ Captures go to `Documents/captures/<time>-s<score>.jpg`. The in-app gallery show
 
 While capturing, the app also sends the newest frame's center square (320px JPEG, same as the web client) to `POST /api/detect`, up to 4 times a second, and draws the returned boxes over the preview. The dashed square shows what YOLO sees. The status bar shows the box count and round-trip time, and the server button's dot turns green when detection works.
 
+## Pricing and speech
+
+Each second's clear frame (full 1080×1920 JPEG) also goes to `POST /api/frame`, the backend pipeline (YOLO → Jev → Gemini → decide). Only one call is in flight at a time; frames saved while it's busy aren't sent. A non-empty `speak` reply is read aloud by `Speaker` with the phone's built-in voice (`AVSpeechSynthesizer`, premium or enhanced English voice when installed). It plays with the silent switch on and through earbuds. The status bar shows the last reply and its round-trip time.
+
+`/api/frame` needs `GEMINI_API_KEY` and `TYPESAFE_API_KEY` in `backend/.env`, and `GEMINI_MODEL` must be one your key can use (`gemini-2.5-flash` returns 404 for new keys; `gemini-3.8-flash` works).
+
 Every detection also lands on the Mac at `http://localhost:8080/objects.html`. Each object is appended when it comes into view, repeats included; one held in view isn't repeated.
 
 **Backend URL:** tap the server button to set it, or bake a default in at build time with `BACKEND_URL=http://<mac-ip>:8080`. A build with a new default replaces the URL saved in the app.

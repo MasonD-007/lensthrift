@@ -54,4 +54,33 @@ struct BackendClient: Sendable {
         }
         return try JSONDecoder().decode([Detection].self, from: data)
     }
+
+    /// The pipeline's answer for one frame: the line to say (empty means stay quiet).
+    struct FrameReply: Decodable, Sendable {
+        let speak: String
+        let objects: Int?
+    }
+
+    /// Runs the full pipeline (YOLO → Jev → Gemini → decide) on one frame.
+    func frame(jpeg: Data) async throws -> FrameReply {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/frame"))
+        request.httpMethod = "POST"
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        // Grounded pricing can take several seconds on a new item.
+        request.timeoutInterval = 20
+        let (data, response) = try await URLSession.shared.upload(for: request, from: jpeg)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard http.statusCode == 200 else {
+            // FastAPI errors carry {"detail": "..."}; e.g. 503 when backend/.env is missing keys.
+            let detail = (try? JSONDecoder().decode([String: String].self, from: data))?["detail"]
+            throw FrameError(status: http.statusCode, detail: detail)
+        }
+        return try JSONDecoder().decode(FrameReply.self, from: data)
+    }
+
+    struct FrameError: LocalizedError {
+        let status: Int
+        let detail: String?
+        var errorDescription: String? { "\(status) \(detail ?? "")" }
+    }
 }

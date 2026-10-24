@@ -74,6 +74,10 @@ struct CaptureView: View {
                     } else if let ms = camera.detectLatencyMs {
                         Label(String("YOLO \(camera.detections.count) boxes · \(ms) ms"), systemImage: "viewfinder")
                     }
+                    if let reply = camera.lastReply {
+                        Label(reply + (camera.frameLatencyMs.map { " · \($0) ms" } ?? ""), systemImage: "speaker.wave.2")
+                            .lineLimit(2)
+                    }
                 }
                 .font(.caption.monospacedDigit())
             }

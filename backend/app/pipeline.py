@@ -8,7 +8,7 @@ from PIL import Image
 
 from .comps import apply_comps, tag_for
 from .config import Settings
-from .crops import look, make_crop, top_detections
+from .crops import look, make_crop, rank_targets
 from .decide import compose, decide, phrase
 from .memory import Memory, normalize
 from .models import Detection, ObjectResult, Quote
@@ -31,8 +31,12 @@ class Pipeline:
         self.memory = memory
         self.settings = settings
 
-    async def process_frame(self, img: Image.Image) -> Tuple[str, List[ObjectResult]]:
-        dets = top_detections(self.detect(img), self.settings.max_boxes)
+    async def process_frame(
+        self, img: Image.Image, dets: Optional[List[Detection]] = None
+    ) -> Tuple[str, List[ObjectResult]]:
+        """`dets` is the box the page already stabilized on; without it, YOLO runs and picks the best."""
+        if dets is None:
+            dets = rank_targets(self.detect(img))[: self.settings.max_boxes]
         if not dets:
             return "", []
         crops = [make_crop(img, d) for d in dets]

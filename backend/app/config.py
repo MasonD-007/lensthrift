@@ -20,7 +20,7 @@ class Settings:
     gemini_send_image: bool
     jev_threshold: float = 0.5
     gemini_min_confidence: float = 0.6
-    max_boxes: int = 5
+    max_boxes: int = 1  # one object per frame: the one the page stabilized on
     cooldown_s: float = 30
     default_tag: float = 10
 

@@ -2,10 +2,11 @@
 
 Static pages served by the FastAPI backend. No build step.
 
-- `index.html` + `capture.js`: the main page, run locally on the laptop at `http://localhost:8080`. Press Start; the webcam runs, and a center-cropped 640px JPEG (the dashed square) is sent once the view holds steady for about a second. The reply is spoken and shown as a caption.
+- `index.html` + `capture.js` + `stabilize.js`: the main page, run locally on the laptop at `http://localhost:8080`. Press Start. YOLO tracks what's in view and picks **one** object: the one nearest the middle, with closer (bigger) objects winning ties. People are ignored, since the hand and body holding the item would always be the biggest box. When that object has stayed put for **2 seconds**, the frame and its box go to `/api/frame`, and only that object is priced. The reply is spoken and shown as a caption.
+  - The badge on the camera shows each stage: **Searching**, then **Stabilizing cup 45%** (amber, filling with the countdown bar on the box), then **Stabilized: cup · pricing…**, then **Stabilized: cup · sent** (green). The result box then replaces the target box.
+  - A held item is sent once. It's scanned again when it leaves and comes back, or when a different object takes the middle. Moving it restarts the countdown, and a missed YOLO frame (under 0.5 s) doesn't.
 - **Debug view** (the Debug button, or **D**; remembered per browser, and `?debug=1` / `?debug=0` override it):
-  - live YOLO boxes, plus each object's decision drawn on the frame (green spoke, gray quiet, red error)
-  - motion and hold meters, round-trip time, and counters
+  - every YOLO box (blue), plus the phase, target, hold time, round-trip time and counters
   - controls: Send now, Mute, Replay, Reset memory, and a camera picker
   - the decision log beside the camera
 - Keys: **D** debug, **Space** send now, **M** mute, **R** replay.
@@ -13,7 +14,7 @@ Static pages served by the FastAPI backend. No build step.
 
 ## Backend contract
 
-`POST /api/frame` (body: `image/jpeg`) returns:
+`POST /api/frame?box=x1,y1,x2,y2&label=cup&conf=0.84` (body: `image/jpeg`) prices just that box (normalized 0-1 to the sent square). Without `box`, the backend runs YOLO itself and keeps the single best object by the same rule. It returns:
 
 ```json
 { "speak": "40 to 60 dollars, white milk glass mixing bowl.", "objects": [ /* one log row per object, as below */ ] }

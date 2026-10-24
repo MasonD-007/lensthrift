@@ -26,8 +26,9 @@ class FakePipeline:
         self.line, self.results = line, results
         self.frames = []
 
-    async def process_frame(self, img):
+    async def process_frame(self, img, dets=None):
         self.frames.append(img)
+        self.dets = dets
         return self.line, self.results
 
 
@@ -155,3 +156,25 @@ def test_status_reports_last_frame_count_and_line(client):
     client.post("/api/frame", content=jpeg_bytes())
     status = client.get("/api/status").json()
     assert (status["objects"], status["speak"], status["error"]) == (2, SPOKE.line, False)
+
+
+def test_frame_with_box_prices_only_that_object(client):
+    fake = FakePipeline("", [JUNK])
+    use(fake)
+    r = client.post("/api/frame?box=0.1,0.2,0.5,0.6&label=cup&conf=0.77", content=jpeg_bytes())
+    assert r.status_code == 200
+    (d,) = fake.dets
+    assert (d.label, d.conf, d.box) == ("cup", 0.77, (0.1, 0.2, 0.5, 0.6))
+
+
+def test_frame_without_box_lets_the_pipeline_pick(client):
+    fake = FakePipeline("", [])
+    use(fake)
+    client.post("/api/frame", content=jpeg_bytes())
+    assert fake.dets is None
+
+
+def test_frame_with_bad_box_returns_400(client):
+    use(FakePipeline("", []))
+    for box in ("1,2,3", "0.5,0.5,0.2,0.9", "a,b,c,d", "0,0,1.5,1"):
+        assert client.post(f"/api/frame?box={box}", content=jpeg_bytes()).status_code == 400, box

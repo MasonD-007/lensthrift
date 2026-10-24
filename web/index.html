@@ -17,15 +17,14 @@
     <div id="preview">
       <video id="video" playsinline muted autoplay></video>
       <div id="square"><canvas id="boxes"></canvas><canvas id="decisions"></canvas></div>
+      <div id="phase" data-phase="searching" hidden aria-live="polite">
+        <span id="phase-text">Searching</span><span class="phase-bar"><span id="phase-fill"></span></span>
+      </div>
     </div>
     <button id="start" type="button">Start</button>
     <p id="caption" aria-live="polite"></p>
     <p id="status"></p>
     <div class="panel debug-only">
-      <div class="meters">
-        <span>Motion</span><span class="meter"><span id="steady-bar"></span></span>
-        <span>Hold</span><span class="meter"><span id="hold-bar"></span></span>
-      </div>
       <dl id="stats"></dl>
       <div class="controls">
         <button id="send-now" type="button" title="Space">Send now</button>
@@ -41,6 +40,7 @@
 </main>
 <canvas id="canvas" hidden></canvas>
 <script src="log.js"></script>
+<script src="stabilize.js"></script>
 <script src="capture.js"></script>
 </body>
 </html>

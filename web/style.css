@@ -34,10 +34,16 @@ body.live #preview { display: block; }
 
 .panel { margin-top: 1rem; padding: 12px; border: 1px solid var(--line); border-radius: 8px; text-align: left; font-size: .85rem; }
 body.debug .panel.debug-only { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
-.meters { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
-.meter { height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; }
-.meter > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-#steady-bar.over { background: #c93; }
+/* Scan badge: searching -> stabilizing (amber, fills over 2 s) -> stabilized/sent (green). */
+#phase { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 4px;
+  min-width: 190px; padding: 6px 10px; border-radius: 8px; background: rgba(0, 0, 0, .7);
+  border: 1px solid #444; color: #ccc; font-size: .85rem; text-align: left; }
+#phase[hidden] { display: none; }
+.phase-bar { height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+#phase-fill { display: block; height: 100%; width: 0; background: #fb3; transition: width .1s linear; }
+#phase[data-phase="stabilizing"] { border-color: #fb3; color: #fd7; }
+#phase[data-phase="stabilized"], #phase[data-phase="sent"] { border-color: #3c6; color: #7e9; }
+#phase[data-phase="stabilized"] #phase-fill, #phase[data-phase="sent"] #phase-fill { background: #3c6; }
 #stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
 #stats dt { color: #666; }
 #stats dd { margin: 0; color: #ccc; overflow-wrap: anywhere; }

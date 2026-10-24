@@ -44,6 +44,13 @@ final class SharpFramePicker: MediaMixerOutput, @unchecked Sendable {
         motion.stopDeviceMotionUpdates()
     }
 
+    /// The newest camera frame, or nil before the first one arrives.
+    func latestFrame() -> CVPixelBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        return latest
+    }
+
     /// Returns the sharpest frame seen since the last call, falling back to the newest frame, and starts a new window.
     func takeBest() -> Pick? {
         lock.lock()

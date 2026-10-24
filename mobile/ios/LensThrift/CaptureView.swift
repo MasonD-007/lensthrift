@@ -4,6 +4,8 @@ import SwiftUI
 struct CaptureView: View {
     @StateObject private var camera = CameraModel()
     @State private var showGallery = false
+    @State private var showBackend = false
+    @State private var backendURL = BackendClient.savedURL
 
     var body: some View {
         ZStack {
@@ -12,6 +14,10 @@ struct CaptureView: View {
             if camera.cameraAvailable {
                 MTHKViewRepresentable(previewSource: camera, videoGravity: .resizeAspectFill)
                     .ignoresSafeArea()
+                if camera.isLive, let frameSize = camera.detectFrameSize {
+                    BoxOverlay(detections: camera.detections, frameSize: frameSize)
+                        .ignoresSafeArea()
+                }
             } else {
                 Image(systemName: "video.slash")
                     .font(.system(size: 48))
@@ -28,6 +34,16 @@ struct CaptureView: View {
         .task { await camera.start() }
         .sheet(isPresented: $showGallery) {
             GalleryView { camera.refreshCount() }
+        }
+        .alert("Backend URL", isPresented: $showBackend) {
+            TextField("http://192.168.1.10:8080", text: $backendURL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+            Button("Save") { BackendClient.savedURL = backendURL }
+            Button("Cancel", role: .cancel) { backendURL = BackendClient.savedURL }
+        } message: {
+            Text("Where `make run` is serving, or its tunnel URL.")
         }
     }
 
@@ -50,6 +66,17 @@ struct CaptureView: View {
                 }
             }
             .font(.caption.monospacedDigit())
+            if camera.isLive {
+                Group {
+                    if let error = camera.backendError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    } else if let ms = camera.detectLatencyMs {
+                        Label(String("YOLO \(camera.detections.count) boxes · \(ms) ms"), systemImage: "viewfinder")
+                    }
+                }
+                .font(.caption.monospacedDigit())
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -86,10 +113,23 @@ struct CaptureView: View {
             .accessibilityLabel(camera.isLive ? "Stop capture" : "Start capture")
             .disabled(!camera.cameraAvailable)
 
-            Text(camera.isLive ? "1 / sec" : "Start")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            Button {
+                backendURL = BackendClient.savedURL
+                showBackend = true
+            } label: {
+                Image(systemName: "server.rack")
+                    .font(.title2)
+                    .frame(width: 56, height: 56)
+                    .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(alignment: .topTrailing) {
+                        Circle()
+                            .fill(camera.backendError == nil && camera.detectLatencyMs != nil ? .green : .gray)
+                            .frame(width: 10, height: 10)
+                            .padding(6)
+                    }
+            }
+            .accessibilityLabel("Backend URL")
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .tint(.white)
         .padding(16)

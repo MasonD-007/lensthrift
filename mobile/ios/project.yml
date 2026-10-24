@@ -26,8 +26,18 @@ targets:
     dependencies:
       - package: HaishinKit
         product: HaishinKit
+    info:
+      path: LensThrift/Info.plist
+      properties:
+        # Lets the app call `make run` over plain HTTP on the local network.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Thrift Lens sends camera frames to your laptop's backend on this network.
+        # Default backend, overridable in the app. Set at build time with BACKEND_URL=http://<mac-ip>:8080.
+        LTBackendURL: $(BACKEND_URL)
     settings:
       base:
+        BACKEND_URL: ""
         PRODUCT_BUNDLE_IDENTIFIER: com.lensthrift.mobile
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES

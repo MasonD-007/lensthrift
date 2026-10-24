@@ -18,6 +18,20 @@ To reduce motion blur, the camera focuses on the center and caps exposure at 1/6
 
 Captures go to `Documents/captures/<time>-s<score>.jpg`. The in-app gallery shows each capture's gap from the previous one and its sharpness score. They're also in the Files app under **On My iPhone → Thrift Lens**. The backend upload belongs at the `TODO` in `CameraModel.captureOnce()`.
 
+## YOLO boxes
+
+While capturing, the app also sends the newest frame's center square (320px JPEG, same as the web client) to `POST /api/detect`, up to 4 times a second, and draws the returned boxes over the preview. The dashed square shows what YOLO sees. The status bar shows the box count and round-trip time, and the server button's dot turns green when detection works.
+
+Every detection also lands on the Mac at `http://localhost:8080/objects.html`. Each object is appended when it comes into view, repeats included; one held in view isn't repeated.
+
+**Backend URL:** tap the server button to set it, or bake a default in at build time with `BACKEND_URL=http://<mac-ip>:8080`. A build with a new default replaces the URL saved in the app.
+
+**Networks:** venue Wi-Fi often blocks phone-to-laptop traffic. Put the Mac on the iPhone's Personal Hotspot instead. Hotspots can be IPv6-only, so run the backend with `--host ::` and use the Mac's IPv6 address, e.g. `http://[2607:…]:8080`:
+
+```bash
+cd backend && .venv/bin/python -m uvicorn app.main:app --host :: --port 8080
+```
+
 ## Run it
 
 ```bash

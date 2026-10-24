@@ -21,14 +21,25 @@ final class CameraModel: ObservableObject {
     @Published private(set) var lastSize: CGSize?
     @Published private(set) var lastScore: Double?
     @Published private(set) var savedCount = CaptureStore.count()
+    /// YOLO boxes for the latest detect call, normalized to the frame's center square.
+    @Published private(set) var detections: [Detection] = []
+    /// Pixel size of the frame the boxes belong to, for mapping them onto the preview.
+    @Published private(set) var detectFrameSize: CGSize?
+    @Published private(set) var detectLatencyMs: Int?
+    @Published private(set) var backendError: String?
 
     /// The backend wants about one frame per second (see Plan.md).
     static let interval: Duration = .seconds(1)
+    /// Detect calls are tiny (320px), so they run faster than captures; this caps them at 4 a second.
+    static let detectInterval: Duration = .milliseconds(250)
+    /// Edge of the square JPEG sent to YOLO, same as the web client.
+    static let detectSide: CGFloat = 320
 
     let mixer = MediaMixer()
     private let picker = SharpFramePicker()
     private let photoTaker = PhotoTaker()
     private var liveTask: Task<Void, Never>?
+    private var detectTask: Task<Void, Never>?
     private var isCapturing = false
 
     func start() async {
@@ -67,11 +78,14 @@ final class CameraModel: ObservableObject {
     func setLive(_ on: Bool) {
         isLive = on
         liveTask?.cancel()
+        detectTask?.cancel()
         guard on else {
             picker.stopMotion()
+            detections = []
             status = "Live capture off"
             return
         }
+        detectTask = Task { [weak self] in await self?.detectLoop() }
         picker.startMotion()
         _ = picker.takeBest() // Start the first window fresh.
         liveTask = Task { [weak self] in
@@ -79,6 +93,43 @@ final class CameraModel: ObservableObject {
                 try? await Task.sleep(for: Self.interval)
                 guard !Task.isCancelled else { return }
                 await self?.captureOnce()
+            }
+        }
+    }
+
+    /// Sends the newest frame's center square to YOLO as fast as replies come back, up to `detectInterval`.
+    private func detectLoop() async {
+        while !Task.isCancelled {
+            let started = ContinuousClock.now
+            guard let client = BackendClient() else {
+                backendError = "Set the backend URL"
+                try? await Task.sleep(for: .seconds(1))
+                continue
+            }
+            if let frame = picker.latestFrame() {
+                let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
+                do {
+                    let jpeg = await Task.detached(priority: .utility) {
+                        CaptureStore.squareJPEG(pixelBuffer: frame, side: Self.detectSide)
+                    }.value
+                    guard let jpeg else { throw CocoaError(.fileWriteUnknown) }
+                    let boxes = try await client.detect(jpeg: jpeg)
+                    guard !Task.isCancelled else { return }
+                    detections = boxes
+                    detectFrameSize = size
+                    detectLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
+                    backendError = nil
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    detections = []
+                    backendError = "Backend unreachable: \(client.baseURL.host() ?? "?")"
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+            }
+            let elapsed = ContinuousClock.now - started
+            if elapsed < Self.detectInterval {
+                try? await Task.sleep(for: Self.detectInterval - elapsed)
             }
         }
     }

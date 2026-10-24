@@ -37,6 +37,22 @@ struct CaptureStore {
         return try save(jpeg: data, size: image.extent.size, tag: tag)
     }
 
+    /// The centered square of a frame, scaled to `side` px, as JPEG. Matches what the web client sends to YOLO.
+    static func squareJPEG(pixelBuffer: CVPixelBuffer, side: CGFloat) -> Data? {
+        let image = CIImage(cvPixelBuffer: pixelBuffer)
+        let extent = image.extent
+        let s = min(extent.width, extent.height)
+        let crop = CGRect(x: extent.midX - s / 2, y: extent.midY - s / 2, width: s, height: s)
+        let scaled = image.cropped(to: crop)
+            .transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
+            .transformed(by: CGAffineTransform(scaleX: side / s, y: side / s))
+        return ciContext.jpegRepresentation(
+            of: scaled,
+            colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+            options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.7]
+        )
+    }
+
     static func save(jpeg data: Data, tag: String) throws -> Saved {
         let size = UIImage(data: data)?.pixelSize ?? .zero
         return try save(jpeg: data, size: size, tag: tag)

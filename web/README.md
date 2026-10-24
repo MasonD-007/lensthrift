@@ -13,7 +13,12 @@ Static pages served by the FastAPI backend. No build step.
   - every YOLO box (blue), plus the phase, target, hold time, round-trip time and counters
   - controls: Send now, Mute, Replay, Reset memory, and a camera picker
   - the decision log beside the camera
-- Keys: **D** debug, **Space** send now, **M** mute, **R** replay.
+- Keys: **D** debug, **Space** send now, **M** mute, **R** replay, **T** test sound.
+- **Sound:**
+  - Whispers are spoken by the browser's built-in speech engine, but only when an item is worth it. Junk, quiet items and errors stay silent: that's the demo. Without API keys in `backend/.env` every frame fails, so nothing is ever spoken.
+  - **Test sound** (top right, or **T**) plays a blip and a sample whisper without the backend, to check that the speakers work.
+  - In debug mode only, short tones mark each step: a high blip when an item stabilizes, two falling tones for not resalable, one tone for quiet, and a low buzz for an error.
+  - Mute silences everything.
 - `log.js`: the decision log view (filters, pause, clear), used by the debug panel and by `judge.html`, a standalone copy for a second window.
 
 ## Backend contract

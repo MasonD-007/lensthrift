@@ -10,7 +10,10 @@
 <body class="capture">
 <header class="topbar">
   <span class="brand">Thrift Lens</span>
-  <button id="debug-toggle" type="button" aria-pressed="false" title="Debug view (D)">Debug</button>
+  <span class="top-actions">
+    <button id="test-sound" type="button" title="Play a sample whisper (T)">Test sound</button>
+    <button id="debug-toggle" type="button" aria-pressed="false" title="Debug view (D)">Debug</button>
+  </span>
 </header>
 <main class="layout">
   <section class="stage">
@@ -33,7 +36,7 @@
         <button id="reset-memory" type="button" title="Forget cached quotes and the 30 s cooldown">Reset memory</button>
         <select id="camera" aria-label="Camera"></select>
       </div>
-      <p class="keys">D debug · Space send now · M mute · R replay</p>
+      <p class="keys">D debug · Space send now · M mute · R replay · T test sound · debug mode plays short tones for each result</p>
     </div>
   </section>
   <aside id="log" class="debug-only" aria-label="Decision log"></aside>

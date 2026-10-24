@@ -11,6 +11,7 @@
   // Result colors: red means Jev judged it not resalable; errors are purple so they don't read as junk.
   const COLORS = { spoke: '#3c6', quiet: '#999', junk: '#e33', error: '#b7f' };
   const NOT_RESALABLE = 'not resalable'; // the pipeline's reason when Jev stops an object
+  const SOUND_CHECK = 'Sound check. Forty to sixty dollars, milk glass mixing bowl.';
   const PHASE_COLORS = { stabilizing: '#fb3', stabilized: '#3c6', sent: '#3c6' };
   const HOLD_S = (Stabilize.HOLD_MS / 1000).toFixed(1);
 
@@ -60,20 +61,75 @@
 
   function speakNow(text) {
     if (!text) return;
+    if (!('speechSynthesis' in window)) {
+      setStatus('this browser has no speech: try Chrome, Safari or Firefox');
+      return;
+    }
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.1;
+    u.onerror = (e) => { // 'interrupted' / 'canceled' just mean a newer line took over
+      if (e.error !== 'interrupted' && e.error !== 'canceled') setStatus('speech failed: ' + e.error);
+    };
     speechSynthesis.speak(u);
   }
 
   const speak = (text) => { if (!muted) speakNow(text); };
 
-  // Browsers only allow speech after a user gesture; a silent utterance on Start unlocks it.
+  // Browsers only allow audio after a user gesture; Start (or Test sound) unlocks speech and tones.
   function unlockSpeech() {
     const u = new SpeechSynthesisUtterance(' ');
     u.volume = 0;
     speechSynthesis.speak(u);
+    unlockTones();
   }
+
+  // Sound check: proves speech reaches the speakers without needing the backend or API keys.
+  function testSound() {
+    unlockSpeech();
+    showCaption(SOUND_CHECK);
+    speakNow(SOUND_CHECK);
+    tone('stabilized');
+    if (!live) setStatus('sound check: you should hear a blip and a sample whisper');
+  }
+
+  // ---- Debug tones: short cues while testing. Normal mode stays silent on junk (the demo). ----
+
+  let audioCtx = null;
+  function unlockTones() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = audioCtx || new Ctx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  // [frequency Hz, duration s] notes per cue
+  const TONES = {
+    stabilized: [[880, 0.07]],
+    junk: [[330, 0.12], [220, 0.18]],
+    quiet: [[440, 0.1]],
+    error: [[160, 0.25]],
+  };
+
+  function tone(kind) {
+    if (!audioCtx || muted || !TONES[kind]) return;
+    let at = audioCtx.currentTime;
+    for (const [freq, dur] of TONES[kind]) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = freq;
+      osc.type = kind === 'error' ? 'square' : 'sine';
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.15, at + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(at);
+      osc.stop(at + dur + 0.02);
+      at += dur + 0.04;
+    }
+  }
+
+  const debugTone = (kind) => { if (debug) tone(kind); };
 
   function showCaption(text) {
     captionEl.textContent = text;
@@ -136,6 +192,7 @@
       }
       const o = objects[0];
       result = o ? { kind: outcome(o), name: o.item || o.label, reason: o.reason } : null;
+      if (result && !reply.speak) debugTone(result.kind); // a whisper is its own sound
       lastResult = reply.speak ? 'spoke: ' + reply.speak
         : !o ? 'nothing to price'
           : result.kind === 'junk' ? result.name + ': not resalable'
@@ -147,6 +204,7 @@
       stats.lastError = e.message;
       lastResult = 'error: ' + e.message;
       result = { kind: 'error', name: target ? target.label : 'frame', reason: e.message };
+      debugTone('error');
     } finally {
       inFlight = false;
       setStatus(lastResult);
@@ -171,6 +229,7 @@
     }
     if (scan.phase === 'stabilized' && !inFlight) {
       stabilizer.markSent();
+      debugTone('stabilized');
       sendFrame(scan.target);
       scan = { ...scan, phase: 'sent' };
     }
@@ -389,6 +448,7 @@
   blurAfter($('send-now'), sendNow);
   blurAfter(muteBtn, () => setMuted(!muted));
   blurAfter($('replay'), () => speakNow(lastLine));
+  blurAfter($('test-sound'), testSound);
   blurAfter($('reset-memory'), resetMemory);
 
   document.addEventListener('keydown', (e) => {
@@ -398,6 +458,7 @@
       case ' ': e.preventDefault(); sendNow(); break;
       case 'm': setMuted(!muted); break;
       case 'r': speakNow(lastLine); break;
+      case 't': testSound(); break;
       default: return;
     }
   });

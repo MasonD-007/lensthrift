@@ -1,0 +1,362 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A702DFF0341DBECD3EB24925 /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8EDB244A75413174AF03D60 /* GalleryView.swift */; };
+		B43BB27DE0CC5D0D1E013955 /* SharpFramePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001D0394353FDE0BCB3ACB5B /* SharpFramePicker.swift */; };
+		B54ED703B776391A378C1BEA /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B62B163FE53052C074679A /* CaptureView.swift */; };
+		D3744D608B69FB5D3E81A6F1 /* HaishinKit in Frameworks */ = {isa = PBXBuildFile; productRef = E55D230CFB131A21D8EA747A /* HaishinKit */; };
+		D65F2E7557CA67C582C7C9E6 /* LensThriftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D97CB9F7F370CA3B7F9F237 /* LensThriftApp.swift */; };
+		DD3B400A8C30D6C890383CBA /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AAE9B2E1A12810A78A94F8C /* CameraModel.swift */; };
+		E5C93B77FDF9727F2438E6A6 /* PhotoTaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A095FCB4C9B4DEB3A0215FE5 /* PhotoTaker.swift */; };
+		F591FC38096935287FFBCBFC /* CaptureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9613317E237BAE3C5648D897 /* CaptureStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		001D0394353FDE0BCB3ACB5B /* SharpFramePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharpFramePicker.swift; sourceTree = "<group>"; };
+		13B62B163FE53052C074679A /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
+		22B20B028B9F0313B8B006C2 /* LensThrift.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LensThrift.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D97CB9F7F370CA3B7F9F237 /* LensThriftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LensThriftApp.swift; sourceTree = "<group>"; };
+		6AAE9B2E1A12810A78A94F8C /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
+		9613317E237BAE3C5648D897 /* CaptureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureStore.swift; sourceTree = "<group>"; };
+		A095FCB4C9B4DEB3A0215FE5 /* PhotoTaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoTaker.swift; sourceTree = "<group>"; };
+		E8EDB244A75413174AF03D60 /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		9D14F95B918A8D18D97048E5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D3744D608B69FB5D3E81A6F1 /* HaishinKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		096F9CE9DBAEBA16B758EF50 /* LensThrift */ = {
+			isa = PBXGroup;
+			children = (
+				6AAE9B2E1A12810A78A94F8C /* CameraModel.swift */,
+				9613317E237BAE3C5648D897 /* CaptureStore.swift */,
+				13B62B163FE53052C074679A /* CaptureView.swift */,
+				E8EDB244A75413174AF03D60 /* GalleryView.swift */,
+				3D97CB9F7F370CA3B7F9F237 /* LensThriftApp.swift */,
+				A095FCB4C9B4DEB3A0215FE5 /* PhotoTaker.swift */,
+				001D0394353FDE0BCB3ACB5B /* SharpFramePicker.swift */,
+			);
+			path = LensThrift;
+			sourceTree = "<group>";
+		};
+		6F10CF97FDA6ADB18E51EA74 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				22B20B028B9F0313B8B006C2 /* LensThrift.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A6A63832BBD2174B29C219A4 = {
+			isa = PBXGroup;
+			children = (
+				096F9CE9DBAEBA16B758EF50 /* LensThrift */,
+				6F10CF97FDA6ADB18E51EA74 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		043C9699C7734198D1806805 /* LensThrift */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7773D33E7225D28B07DF97EE /* Build configuration list for PBXNativeTarget "LensThrift" */;
+			buildPhases = (
+				BB898BD894C3AF8BF64A51B8 /* Sources */,
+				9D14F95B918A8D18D97048E5 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LensThrift;
+			packageProductDependencies = (
+				E55D230CFB131A21D8EA747A /* HaishinKit */,
+			);
+			productName = LensThrift;
+			productReference = 22B20B028B9F0313B8B006C2 /* LensThrift.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		67AD841A42479C8964942EB7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					043C9699C7734198D1806805 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = B9DCA26F38FAE38F2F42CE94 /* Build configuration list for PBXProject "LensThrift" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = A6A63832BBD2174B29C219A4;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				54905F7C2B2FB1411E7B7793 /* XCRemoteSwiftPackageReference "HaishinKit.swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 6F10CF97FDA6ADB18E51EA74 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				043C9699C7734198D1806805 /* LensThrift */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BB898BD894C3AF8BF64A51B8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DD3B400A8C30D6C890383CBA /* CameraModel.swift in Sources */,
+				F591FC38096935287FFBCBFC /* CaptureStore.swift in Sources */,
+				B54ED703B776391A378C1BEA /* CaptureView.swift in Sources */,
+				A702DFF0341DBECD3EB24925 /* GalleryView.swift in Sources */,
+				D65F2E7557CA67C582C7C9E6 /* LensThriftApp.swift in Sources */,
+				E5C93B77FDF9727F2438E6A6 /* PhotoTaker.swift in Sources */,
+				B43BB27DE0CC5D0D1E013955 /* SharpFramePicker.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		03F1B18CC6C95A3B8EE8584F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3913A5AD4571473C33122F47 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Thrift Lens";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Thrift Lens uses the camera to capture items for pricing.";
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lensthrift.mobile;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		89AA649363A6A4E9315F39FC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Thrift Lens";
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Thrift Lens uses the camera to capture items for pricing.";
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lensthrift.mobile;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		FCEF33E4EE72672D6B924CE0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7773D33E7225D28B07DF97EE /* Build configuration list for PBXNativeTarget "LensThrift" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				89AA649363A6A4E9315F39FC /* Debug */,
+				3913A5AD4571473C33122F47 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B9DCA26F38FAE38F2F42CE94 /* Build configuration list for PBXProject "LensThrift" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FCEF33E4EE72672D6B924CE0 /* Debug */,
+				03F1B18CC6C95A3B8EE8584F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		54905F7C2B2FB1411E7B7793 /* XCRemoteSwiftPackageReference "HaishinKit.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/HaishinKit/HaishinKit.swift";
+			requirement = {
+				kind = exactVersion;
+				version = 2.2.5;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E55D230CFB131A21D8EA747A /* HaishinKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 54905F7C2B2FB1411E7B7793 /* XCRemoteSwiftPackageReference "HaishinKit.swift" */;
+			productName = HaishinKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 67AD841A42479C8964942EB7 /* Project object */;
+}

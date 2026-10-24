@@ -1,0 +1,149 @@
+import AVFoundation
+import HaishinKit
+import UIKit
+
+/// Owns the HaishinKit pipeline and turns it into one clear still per second.
+@MainActor
+final class CameraModel: ObservableObject {
+    /// Where a still comes from. Not shown in the UI; `.sharpestFrame` is the default.
+    enum Source {
+        /// The sharpest live frame of the last second (1080x1920). Cheap, no shutter.
+        case sharpestFrame
+        /// A native AVCapturePhotoOutput still. Sharper processing, more work per shot. Kept in case it's needed.
+        case photo
+    }
+
+    var source: Source = .sharpestFrame
+
+    @Published private(set) var isLive = false
+    @Published private(set) var cameraAvailable = true
+    @Published private(set) var status = "Starting camera…"
+    @Published private(set) var lastSize: CGSize?
+    @Published private(set) var lastScore: Double?
+    @Published private(set) var savedCount = CaptureStore.count()
+
+    /// The backend wants about one frame per second (see Plan.md).
+    static let interval: Duration = .seconds(1)
+
+    let mixer = MediaMixer()
+    private let picker = SharpFramePicker()
+    private let photoTaker = PhotoTaker()
+    private var liveTask: Task<Void, Never>?
+    private var isCapturing = false
+
+    func start() async {
+        guard await AVCaptureDevice.requestAccess(for: .video) else {
+            cameraAvailable = false
+            status = "Camera access denied. Enable it in Settings."
+            return
+        }
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            cameraAvailable = false
+            status = "No camera on this device (the Simulator has none)."
+            return
+        }
+        do {
+            await mixer.setSessionPreset(.hd1920x1080)
+            try await mixer.attachVideo(device, track: 0) { unit in
+                guard let device = unit.device else { return }
+                try Self.tuneForWalking(device)
+            }
+            let photoTaker = photoTaker
+            try await mixer.configuration { session in
+                guard session.canAddOutput(photoTaker.output) else { return }
+                session.addOutput(photoTaker.output)
+            }
+            photoTaker.configure(for: device)
+            await mixer.addOutput(picker)
+            await mixer.startRunning()
+            UIApplication.shared.isIdleTimerDisabled = true
+            status = "Ready"
+        } catch {
+            cameraAvailable = false
+            status = "Camera failed: \(error.localizedDescription)"
+        }
+    }
+
+    func setLive(_ on: Bool) {
+        isLive = on
+        liveTask?.cancel()
+        guard on else {
+            picker.stopMotion()
+            status = "Live capture off"
+            return
+        }
+        picker.startMotion()
+        _ = picker.takeBest() // Start the first window fresh.
+        liveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.interval)
+                guard !Task.isCancelled else { return }
+                await self?.captureOnce()
+            }
+        }
+    }
+
+    func refreshCount() {
+        savedCount = CaptureStore.count()
+    }
+
+    func captureOnce() async {
+        guard cameraAvailable, !isCapturing else { return }
+        isCapturing = true
+        defer { isCapturing = false }
+        do {
+            let saved: CaptureStore.Saved
+            switch source {
+            case .sharpestFrame:
+                guard let pick = picker.takeBest() else {
+                    status = "Waiting for first frame…"
+                    return
+                }
+                // Encode off the main thread so the UI stays smooth.
+                saved = try await Task.detached(priority: .userInitiated) {
+                    try CaptureStore.save(pixelBuffer: pick.pixelBuffer, tag: "s\(Int(pick.score))")
+                }.value
+                lastScore = pick.score
+            case .photo:
+                let data = try await photoTaker.capture()
+                saved = try CaptureStore.save(jpeg: data, tag: "photo")
+                lastScore = nil
+            }
+            lastSize = saved.pixelSize
+            savedCount += 1
+            status = "Saved \(saved.url.lastPathComponent)"
+            // TODO: POST saved.url's JPEG to the backend (SAM 3 / Gemini) once its endpoint exists.
+        } catch {
+            status = "Capture failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Settings that cut motion blur on a chest-mounted phone without extra processing.
+    nonisolated private static func tuneForWalking(_ device: AVCaptureDevice) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        // Items are in the middle of the frame; focus there, and refocus fast rather than smoothly.
+        if device.isFocusPointOfInterestSupported {
+            device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+        }
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+        if device.isSmoothAutoFocusSupported {
+            device.isSmoothAutoFocusEnabled = false
+        }
+        // Cap shutter time at 1/60s so walking doesn't smear frames; low light gets noisier instead.
+        let cap = CMTime(value: 1, timescale: 60)
+        if device.isExposureModeSupported(.continuousAutoExposure),
+           cap >= device.activeFormat.minExposureDuration {
+            device.exposureMode = .continuousAutoExposure
+            device.activeMaxExposureDuration = cap
+        }
+    }
+}
+
+extension CameraModel: MTHKViewRepresentable.PreviewSource {
+    nonisolated func connect(to view: MTHKView) {
+        Task { await mixer.addOutput(view) }
+    }
+}

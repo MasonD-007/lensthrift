@@ -11,17 +11,20 @@ help:
 	@echo "make tunnel   HTTPS tunnel to :$(PORT) (cloudflared, falls back to ngrok)"
 	@echo "make clean    remove venv and caches"
 
-$(PY):
-	python3 -m venv $(VENV)
+STAMP := $(VENV)/.installed
+
+$(STAMP): backend/requirements.txt
+	test -x $(PY) || python3 -m venv $(VENV)
 	$(PY) -m pip install -q --upgrade pip
 	$(PY) -m pip install -q -r backend/requirements.txt
+	touch $(STAMP)
 
-install: $(PY)
+install: $(STAMP)
 
-run: $(PY)
+run: $(STAMP)
 	cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $(PORT)
 
-dev: $(PY)
+dev: $(STAMP)
 	cd backend && .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $(PORT) --reload
 
 tunnel:

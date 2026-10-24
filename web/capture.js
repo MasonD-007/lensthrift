@@ -6,6 +6,8 @@
   const TICK_MS = 250;           // steady-check cadence
   const STEADY_MS = 1000;        // view must hold this long before we send
   const STEADY_DIFF = 6;         // mean abs luma diff (0-255) under which we call it steady
+  const DETECT_PX = 320;         // YOLO input edge
+  const DETECT_MS = 100;         // pause between detect calls
   const SAMPLE = 32;             // tiny grayscale grid for motion compare
 
   const video = document.getElementById('video');
@@ -61,10 +63,10 @@
     return sum / a.length;
   }
 
-  function frameBlob() {
+  function frameBlob(px = FRAME_PX) {
     const { sx, sy, s } = squareCrop(video.videoWidth, video.videoHeight);
-    canvas.width = canvas.height = FRAME_PX;
-    canvas.getContext('2d').drawImage(video, sx, sy, s, s, 0, 0, FRAME_PX, FRAME_PX);
+    canvas.width = canvas.height = px;
+    canvas.getContext('2d').drawImage(video, sx, sy, s, s, 0, 0, px, px);
     return new Promise((res) => canvas.toBlob(res, 'image/jpeg', JPEG_QUALITY));
   }
 
@@ -106,12 +108,57 @@
     }
   }
 
+  // YOLO boxes drawn over the preview; the sent frame is the same square the preview shows.
+  const boxes = document.getElementById('boxes');
+  let detecting = false;
+
+  function drawBoxes(dets) {
+    const w = boxes.width = boxes.clientWidth;
+    const h = boxes.height = boxes.clientHeight;
+    const ctx = boxes.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineWidth = 2;
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.textBaseline = 'top';
+    for (const d of dets) {
+      const [x1, y1, x2, y2] = d.box;
+      const text = d.label + ' ' + Math.round(d.conf * 100) + '%';
+      ctx.strokeStyle = '#3f9';
+      ctx.strokeRect(x1 * w, y1 * h, (x2 - x1) * w, (y2 - y1) * h);
+      ctx.fillStyle = '#3f9';
+      ctx.fillRect(x1 * w, y1 * h, ctx.measureText(text).width + 8, 18);
+      ctx.fillStyle = '#000';
+      ctx.fillText(text, x1 * w + 4, y1 * h + 2);
+    }
+  }
+
+  async function detectLoop() {
+    if (!detecting && video.readyState >= 2 && document.body.classList.contains('live')
+        && !document.body.classList.contains('dark')) {
+      detecting = true;
+      try {
+        const r = await fetch('/api/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: await frameBlob(DETECT_PX),
+        });
+        if (r.ok) drawBoxes(await r.json());
+      } catch (_) { /* backend busy; next loop */ }
+      detecting = false;
+    }
+    setTimeout(detectLoop, DETECT_MS);
+  }
+
   async function keepAwake() {
     try { await navigator.wakeLock?.request('screen'); } catch (_) { /* best effort */ }
   }
 
   startBtn.addEventListener('click', async () => {
     unlockSpeech();
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus('camera needs HTTPS: open the tunnel URL, not the LAN IP');
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
@@ -124,11 +171,14 @@
       return;
     }
     startBtn.hidden = true;
+    document.body.classList.add('live');
+    if (new URLSearchParams(location.search).has('dark')) document.body.classList.add('dark');
     setStatus('listening');
     keepAwake();
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') keepAwake();
     });
     setInterval(tick, TICK_MS);
+    detectLoop();
   });
 })();

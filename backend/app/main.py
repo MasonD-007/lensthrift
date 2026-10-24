@@ -3,11 +3,18 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
+import io
+
 from fastapi import FastAPI, Request
+from PIL import Image
+from ultralytics import YOLO
 from fastapi.staticfiles import StaticFiles
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 LOG_SIZE = 200
+
+YOLO_MODEL = "yolo11n.pt"  # downloaded on first use
+yolo = YOLO(YOLO_MODEL)
 
 app = FastAPI(title="Thrift Lens")
 log: deque[dict] = deque(maxlen=LOG_SIZE)  # newest first
@@ -66,6 +73,17 @@ async def frame(request: Request) -> dict:
         }
     )
     return {"speak": line}
+
+
+@app.post("/api/detect")
+async def detect(request: Request) -> list[dict]:
+    """YOLO boxes for the preview overlay, normalized to 0-1 of the sent frame."""
+    img = Image.open(io.BytesIO(await request.body())).convert("RGB")
+    result = yolo.predict(img, imgsz=320, conf=0.3, verbose=False)[0]
+    return [
+        {"label": result.names[int(c)], "conf": float(p), "box": [float(v) for v in xyxyn]}
+        for c, p, xyxyn in zip(result.boxes.cls, result.boxes.conf, result.boxes.xyxyn)
+    ]
 
 
 @app.get("/api/log")

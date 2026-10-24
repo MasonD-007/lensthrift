@@ -28,6 +28,7 @@ final class SharpFramePicker: MediaMixerOutput, @unchecked Sendable {
     private var latest: CVPixelBuffer?
     private var frameCount = 0
     private var isScoring = false
+    private var scoringEnabled = true
     private let motion = CMMotionManager()
 
     var videoTrackId: UInt8? { 0 }
@@ -42,6 +43,14 @@ final class SharpFramePicker: MediaMixerOutput, @unchecked Sendable {
 
     func stopMotion() {
         motion.stopDeviceMotionUpdates()
+    }
+
+    /// Turns sharpness scoring on or off. Off, the picker only keeps the newest frame (almost free).
+    func setScoringEnabled(_ enabled: Bool) {
+        lock.lock()
+        scoringEnabled = enabled
+        if !enabled { best = nil }
+        lock.unlock()
     }
 
     /// The newest camera frame, or nil before the first one arrives.
@@ -65,7 +74,7 @@ final class SharpFramePicker: MediaMixerOutput, @unchecked Sendable {
         lock.lock()
         latest = pixelBuffer
         frameCount += 1
-        let shouldScore = frameCount % stride == 0 && !isScoring
+        let shouldScore = scoringEnabled && frameCount % stride == 0 && !isScoring
         if shouldScore { isScoring = true }
         lock.unlock()
         guard shouldScore else { return }

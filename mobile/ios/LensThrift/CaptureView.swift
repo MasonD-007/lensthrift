@@ -15,7 +15,7 @@ struct CaptureView: View {
                 MTHKViewRepresentable(previewSource: camera, videoGravity: .resizeAspectFill)
                     .ignoresSafeArea()
                 if camera.isLive, let frameSize = camera.detectFrameSize {
-                    BoxOverlay(detections: camera.detections, frameSize: frameSize)
+                    BoxOverlay(detections: camera.detections, frameSize: frameSize, scan: camera.scan)
                         .ignoresSafeArea()
                 }
             } else {
@@ -72,7 +72,10 @@ struct CaptureView: View {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
                     } else if let ms = camera.detectLatencyMs {
-                        Label(String("YOLO \(camera.detections.count) boxes · \(ms) ms"), systemImage: "viewfinder")
+                        Label(String("YOLO \(camera.detections.count) boxes · \(ms) ms") + (camera.detectRate.map { String(format: " · %.1f/s", $0) } ?? ""), systemImage: "viewfinder")
+                    }
+                    if let phase = phaseText {
+                        Label(phase, systemImage: "scope")
                     }
                     if let reply = camera.lastReply {
                         Label(reply + (camera.frameLatencyMs.map { " · \($0) ms" } ?? ""), systemImage: "speaker.wave.2")
@@ -85,6 +88,20 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// "Stabilizing bottle 1.2 / 2.0 s", matching the web page's wording.
+    private var phaseText: String? {
+        let scan = camera.scan
+        guard let target = scan.target else { return camera.isLive ? "Searching…" : nil }
+        switch scan.phase {
+        case .stabilizing:
+            return String(format: "Stabilizing %@… %.1f / %.1f s", target.label, scan.progress * Stabilizer.holdS, Stabilizer.holdS)
+        case .stabilized, .sent:
+            return "Stabilized: \(target.label)"
+        case .searching:
+            return nil
+        }
     }
 
     private var controls: some View {

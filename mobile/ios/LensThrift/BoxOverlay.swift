@@ -8,6 +8,8 @@ struct BoxOverlay: View {
     let detections: [Detection]
     /// Pixel size of the frame the boxes belong to (1080x1920 in portrait).
     let frameSize: CGSize
+    /// The object the stabilizer is holding on, drawn in the phase color like the web page.
+    var scan: Stabilizer.Scan?
 
     var body: some View {
         GeometryReader { geo in
@@ -21,21 +23,32 @@ struct BoxOverlay: View {
 
                 ForEach(detections) { detection in
                     let rect = map.rect(for: detection.box)
+                    let color = color(for: detection)
                     Rectangle()
-                        .stroke(.yellow, lineWidth: 2)
+                        .stroke(color, lineWidth: color == .yellow ? 2 : 4)
                         .frame(width: rect.width, height: rect.height)
                         .offset(x: rect.minX, y: rect.minY)
                     Text(verbatim: "\(detection.label) \(Int(detection.conf * 100))%")
                         .font(.caption2.weight(.semibold))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(.yellow)
+                        .background(color)
                         .foregroundStyle(.black)
                         .offset(x: rect.minX, y: max(rect.minY - 16, 0))
                 }
             }
         }
         .allowsHitTesting(false)
+    }
+
+    /// Orange while being held, green once stabilized or sent; other boxes stay yellow.
+    private func color(for detection: Detection) -> Color {
+        guard let scan, let target = scan.target, Stabilizer.iou(target.box, detection.box) >= 0.9 else { return .yellow }
+        switch scan.phase {
+        case .stabilizing: return .orange
+        case .stabilized, .sent: return .green
+        case .searching: return .yellow
+        }
     }
 
     private struct Mapping {

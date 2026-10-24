@@ -38,7 +38,7 @@ struct CaptureStore {
     }
 
     /// The centered square of a frame, scaled to `side` px, as JPEG. Matches what the web client sends to YOLO.
-    static func squareJPEG(pixelBuffer: CVPixelBuffer, side: CGFloat) -> Data? {
+    static func squareJPEG(pixelBuffer: CVPixelBuffer, side: CGFloat, quality: CGFloat = 0.7) -> Data? {
         let image = CIImage(cvPixelBuffer: pixelBuffer)
         let extent = image.extent
         let s = min(extent.width, extent.height)
@@ -49,7 +49,7 @@ struct CaptureStore {
         return ciContext.jpegRepresentation(
             of: scaled,
             colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
-            options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.7]
+            options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: quality]
         )
     }
 

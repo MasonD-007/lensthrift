@@ -26,27 +26,35 @@ final class CameraModel: ObservableObject {
     /// Pixel size of the frame the boxes belong to, for mapping them onto the preview.
     @Published private(set) var detectFrameSize: CGSize?
     @Published private(set) var detectLatencyMs: Int?
+    /// Detect replies per second over the last 2 s, to compare with the web page.
+    @Published private(set) var detectRate: Double?
+    private var detectTimes: [ContinuousClock.Instant] = []
     @Published private(set) var backendError: String?
+    /// Which object is being held steady before it's priced (see `Stabilizer`).
+    @Published private(set) var scan = Stabilizer.Scan(phase: .searching, target: nil, progress: 0)
     /// What the pipeline last said, or why it stayed quiet.
     @Published private(set) var lastReply: String?
     @Published private(set) var frameLatencyMs: Int?
 
     /// The backend wants about one frame per second (see Plan.md).
     static let interval: Duration = .seconds(1)
-    /// Detect calls are tiny (320px), so they run faster than captures; this caps them at 4 a second.
-    static let detectInterval: Duration = .milliseconds(250)
+    /// Pause after each detect reply before the next call, same as the web client's DETECT_MS.
+    static let detectPause: Duration = .milliseconds(100)
     /// Edge of the square JPEG sent to YOLO, same as the web client.
     static let detectSide: CGFloat = 320
+    /// Edge and quality of the square JPEG sent to /api/frame, same as the web client (FRAME_PX, JPEG_QUALITY).
+    static let frameSide: CGFloat = 640
+    static let frameQuality: CGFloat = 0.7
 
     let mixer = MediaMixer()
     private let picker = SharpFramePicker()
     private let photoTaker = PhotoTaker()
-    private var liveTask: Task<Void, Never>?
     private var detectTask: Task<Void, Never>?
     private var isCapturing = false
-    /// One /api/frame call at a time; frames saved meanwhile aren't sent.
+    /// One /api/frame call at a time; an object that stabilizes meanwhile waits for the next hold.
     private var isPricing = false
     private let speaker = Speaker()
+    private var stabilizer = Stabilizer()
 
     func start() async {
         guard await AVCaptureDevice.requestAccess(for: .video) else {
@@ -83,27 +91,24 @@ final class CameraModel: ObservableObject {
 
     func setLive(_ on: Bool) {
         isLive = on
-        liveTask?.cancel()
         detectTask?.cancel()
+        stabilizer.reset()
+        scan = Stabilizer.Scan(phase: .searching, target: nil, progress: 0)
+        detectTimes = []
+        detectRate = nil
+        picker.setScoringEnabled(!on)
         guard on else {
-            picker.stopMotion()
             detections = []
             status = "Live capture off"
             return
         }
+        // Gallery saving (and the sharpness scoring behind it) is paused while live, so the phone
+        // spends its time on detection and pricing. `captureOnce` still works on its own.
+        status = "Live: detecting and pricing"
         detectTask = Task { [weak self] in await self?.detectLoop() }
-        picker.startMotion()
-        _ = picker.takeBest() // Start the first window fresh.
-        liveTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: Self.interval)
-                guard !Task.isCancelled else { return }
-                await self?.captureOnce()
-            }
-        }
     }
 
-    /// Sends the newest frame's center square to YOLO as fast as replies come back, up to `detectInterval`.
+    /// Sends the newest frame's center square to YOLO, pausing `detectPause` after each reply like the web client.
     private func detectLoop() async {
         while !Task.isCancelled {
             let started = ContinuousClock.now
@@ -115,7 +120,7 @@ final class CameraModel: ObservableObject {
             if let frame = picker.latestFrame() {
                 let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
                 do {
-                    let jpeg = await Task.detached(priority: .utility) {
+                    let jpeg = await Task.detached(priority: .userInitiated) {
                         CaptureStore.squareJPEG(pixelBuffer: frame, side: Self.detectSide)
                     }.value
                     guard let jpeg else { throw CocoaError(.fileWriteUnknown) }
@@ -123,7 +128,12 @@ final class CameraModel: ObservableObject {
                     guard !Task.isCancelled else { return }
                     detections = boxes
                     detectFrameSize = size
-                    detectLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
+                    track(boxes, frame: frame)
+                    let now = ContinuousClock.now
+                    detectLatencyMs = Int((now - started) / .milliseconds(1))
+                    detectTimes.append(now)
+                    detectTimes.removeAll { now - $0 > .seconds(2) }
+                    detectRate = Double(detectTimes.count) / 2
                     backendError = nil
                 } catch {
                     guard !Task.isCancelled else { return }
@@ -133,10 +143,7 @@ final class CameraModel: ObservableObject {
                     continue
                 }
             }
-            let elapsed = ContinuousClock.now - started
-            if elapsed < Self.detectInterval {
-                try? await Task.sleep(for: Self.detectInterval - elapsed)
-            }
+            try? await Task.sleep(for: Self.detectPause)
         }
     }
 
@@ -169,26 +176,44 @@ final class CameraModel: ObservableObject {
             lastSize = saved.pixelSize
             savedCount += 1
             status = "Saved \(saved.url.lastPathComponent)"
-            if isLive, !isPricing {
-                Task { await price(saved.url) }
-            }
         } catch {
             status = "Capture failed: \(error.localizedDescription)"
         }
     }
 
-    /// Sends a saved frame through the backend pipeline and speaks the answer, if any.
-    private func price(_ url: URL) async {
-        guard let client = BackendClient(), let jpeg = try? Data(contentsOf: url) else { return }
-        isPricing = true
+    /// Feeds each YOLO result to the stabilizer; once one object has been held for 2 s, prices it.
+    private func track(_ boxes: [Detection], frame: CVPixelBuffer) {
+        let wasSent = scan.phase == .sent
+        scan = stabilizer.update(boxes, now: ProcessInfo.processInfo.systemUptime)
+        if wasSent, scan.phase != .sent {
+            lastReply = nil // a new object (or none): drop the old result
+        }
+        if scan.phase == .stabilized, !isPricing, let target = scan.target {
+            stabilizer.markSent()
+            scan.phase = .sent
+            // Mark busy now, not inside the task, so the next detection can't start a second call.
+            isPricing = true
+            Task { await price(target, frame: frame) }
+        }
+    }
+
+    /// Sends the frame's center square and the target's box through the pipeline, and speaks the answer.
+    /// The box is normalized to the center square, the same square /api/detect saw.
+    private func price(_ target: Detection, frame: CVPixelBuffer) async {
         defer { isPricing = false }
+        guard let client = BackendClient() else { return }
+        let jpeg = await Task.detached(priority: .userInitiated) {
+            CaptureStore.squareJPEG(pixelBuffer: frame, side: Self.frameSide, quality: Self.frameQuality)
+        }.value
+        guard let jpeg else { return }
+        lastReply = "Pricing \(target.label)…"
         let started = ContinuousClock.now
         do {
-            let reply = try await client.frame(jpeg: jpeg)
+            let reply = try await client.frame(jpeg: jpeg, target: target)
             frameLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
             if reply.speak.isEmpty {
-                let priced = reply.objects.first { $0.low != nil }
-                lastReply = "Quiet · " + (priced?.summary ?? "\(reply.objectCount) objects")
+                let o = reply.objects.first
+                lastReply = "Quiet · " + (o.map { $0.summary + ($0.reason.map { " (\($0))" } ?? "") } ?? "nothing to price")
             } else {
                 lastReply = "“\(reply.speak)”"
                 // Capture may have been stopped while the reply was on its way.

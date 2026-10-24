@@ -86,6 +86,7 @@ struct BackendClient: Sendable {
         let low: Double?
         let high: Double?
         let decision: String?
+        let reason: String?
 
         /// "umbrella $3–8", or the YOLO label when nothing was priced.
         var summary: String {
@@ -96,8 +97,18 @@ struct BackendClient: Sendable {
     }
 
     /// Runs the full pipeline (YOLO → Jev → Gemini → decide) on one frame.
-    func frame(jpeg: Data) async throws -> FrameReply {
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/frame"))
+    /// With a `target` (normalized to the sent image), the backend prices only that object,
+    /// like the web client; without one, it runs YOLO itself and picks.
+    func frame(jpeg: Data, target: Detection? = nil) async throws -> FrameReply {
+        var components = URLComponents(url: baseURL.appendingPathComponent("api/frame"), resolvingAgainstBaseURL: false)!
+        if let target {
+            components.queryItems = [
+                URLQueryItem(name: "box", value: target.box.map { String(format: "%.4f", min(1, max(0, $0))) }.joined(separator: ",")),
+                URLQueryItem(name: "label", value: target.label),
+                URLQueryItem(name: "conf", value: String(format: "%.3f", target.conf)),
+            ]
+        }
+        var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         // Grounded pricing can take several seconds on a new item.

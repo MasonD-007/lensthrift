@@ -1,3 +1,9 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 ultralytics==8.3.60
+Pillow==11.3.0
+httpx==0.28.1
+google-genai==1.47.0
+python-dotenv==1.2.1
+pytest==8.4.2
+pytest-asyncio==1.2.0

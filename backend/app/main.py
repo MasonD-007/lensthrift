@@ -5,6 +5,10 @@ from functools import lru_cache, partial
 from pathlib import Path
 
 import io
+import logging
+import json
+import time
+from logging.handlers import RotatingFileHandler
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -21,6 +25,22 @@ from .memory import Memory
 from .models import Detection, ObjectResult
 from .pipeline import Pipeline
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = logging.getLogger("lensthrift")
+if not logger.handlers:
+    # Console shows the summary; the file also keeps one JSON line per object for later review.
+    LOG_DIR.mkdir(exist_ok=True)
+    fmt = logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S")
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(fmt)
+    to_file = RotatingFileHandler(LOG_DIR / "lensthrift.log", maxBytes=5_000_000, backupCount=3)
+    to_file.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%Y-%m-%d %H:%M:%S"))
+    logger.addHandler(console)
+    logger.addHandler(to_file)
+    logger.setLevel(logging.DEBUG)
+
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 LOG_SIZE = 200
 
@@ -29,6 +49,7 @@ yolo = YOLO(YOLO_MODEL)
 
 app = FastAPI(title="Thrift Lens")
 log: deque[dict] = deque(maxlen=LOG_SIZE)  # newest first
+last_frame: dict = {}  # most recent /api/frame outcome, shown on the judge page
 
 
 def decode(body: bytes) -> Image.Image:
@@ -86,12 +107,31 @@ def log_row(ts: str, r: ObjectResult) -> dict:
     }
 
 
+def describe(r: ObjectResult) -> str:
+    jev = "-" if r.jev is None else f"{r.jev:.2f}"
+    price = f" ${r.quote.low:.0f}-{r.quote.high:.0f} '{r.quote.name}'" if r.quote else ""
+    return f"  {r.detection.label} {r.detection.conf:.2f} | jev {jev}{price} | {r.decision}: {r.reason}"
+
+
 @app.post("/api/frame")
 async def frame(request: Request, pipeline: Pipeline = Depends(get_pipeline)) -> dict:
+    started = time.monotonic()
     img = decode(await request.body())
-    line, results = await pipeline.process_frame(img)
+    try:
+        line, results = await pipeline.process_frame(img)
+    except Exception:
+        logger.exception("frame failed")
+        last_frame.update(ts=datetime.now(timezone.utc).isoformat(), objects=0, speak="", error=True)
+        raise
+    ms = round((time.monotonic() - started) * 1000)
     ts = datetime.now(timezone.utc).isoformat()
     rows = [log_row(ts, r) for r in results]
+    logger.info("frame %dx%d: %d object(s) in %d ms%s", img.width, img.height, len(results), ms,
+                f' -> SPEAK "{line}"' if line else "")
+    for r, row in zip(results, rows):
+        logger.info(describe(r))
+        logger.debug("row %s", json.dumps(row, default=str))
+    last_frame.update(ts=ts, objects=len(results), speak=line, ms=ms, error=False)
     for row in reversed(rows):  # keep the frame's own order at the top of the log
         log.appendleft(row)
     return {"speak": line, "objects": rows}
@@ -102,6 +142,11 @@ async def detect(request: Request) -> list[dict]:
     """YOLO boxes for the preview overlay, normalized to 0-1 of the sent frame."""
     img = decode(await request.body())
     return [{"label": d.label, "conf": d.conf, "box": list(d.box)} for d in yolo_detect(img)]
+
+
+@app.get("/api/status")
+def get_status() -> dict:
+    return last_frame
 
 
 @app.get("/api/log")

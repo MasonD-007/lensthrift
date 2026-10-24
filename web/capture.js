@@ -135,14 +135,15 @@
       const reply = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(reply.detail || 'HTTP ' + r.status);
       stats.rtt = Math.round(performance.now() - t0);
+      const objects = reply.objects || [];
       if (reply.speak) {
         lastLine = reply.speak;
         stats.spoke++;
         showCaption(reply.speak);
         speak(reply.speak);
       }
-      setStatus(reply.speak ? 'spoke' : 'quiet');
-      drawDecisions(reply.objects || []);
+      setStatus(reply.speak ? 'spoke' : objects.length + ' object(s), quiet');
+      drawDecisions(objects);
       if (debug) LogView.refresh();
     } catch (e) {
       stats.errors++;

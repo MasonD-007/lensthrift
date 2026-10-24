@@ -19,7 +19,7 @@
     return e;
   };
 
-  let rowsEl, tableEl, emptyEl, pauseBtn;
+  let rowsEl, tableEl, emptyEl, pauseBtn, statusEl;
   const filterBtns = {};
   let filter = FILTERS[store.get(FILTER_KEY)] ? store.get(FILTER_KEY) : 'all';
   let entries = [];
@@ -79,9 +79,22 @@
     emptyEl.textContent = entries.length ? 'No rows match this filter.' : 'Waiting for the first frame…';
   }
 
+  function renderStatus(st) {
+    if (!st || !st.ts) {
+      statusEl.textContent = 'No frames received yet. Is the camera running and the view steady?';
+      return;
+    }
+    const age = Math.round((Date.now() - new Date(st.ts)) / 1000);
+    statusEl.textContent = st.error
+      ? 'Last frame ' + age + 's ago: pipeline error (see the backend terminal).'
+      : 'Last frame ' + age + 's ago: ' + st.objects + ' object(s) found, ' + st.ms + ' ms'
+        + (st.speak ? ', spoke: "' + st.speak + '"' : ', stayed quiet') + '.';
+  }
+
   async function refresh() {
     try {
-      const r = await fetch('/api/log');
+      const [r, st] = await Promise.all([fetch('/api/log'), fetch('/api/status')]);
+      if (st.ok) renderStatus(await st.json());
       if (!r.ok) return;
       const text = await r.text();
       if (text === lastText) return; // unchanged: keep scroll position and selection
@@ -156,8 +169,9 @@
     rowsEl = el('tbody');
     tableEl.append(thead, rowsEl);
     emptyEl = el('div', 'Waiting for the first frame…', 'log-empty');
+    statusEl = el('p', 'No frames received yet.', 'log-status');
 
-    container.append(bar, emptyEl, tableEl);
+    container.append(bar, statusEl, emptyEl, tableEl);
     setFilter(filter);
     setActive(startActive);
   }

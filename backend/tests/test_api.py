@@ -148,3 +148,10 @@ def test_delete_memory_without_pipeline_does_not_build_one(client, monkeypatch):
     monkeypatch.setattr(main, "get_pipeline", lru_cache(maxsize=None)(lambda: calls.append(1)))
     assert client.delete("/api/memory").status_code == 204
     assert calls == []
+
+
+def test_status_reports_last_frame_count_and_line(client):
+    use(FakePipeline(SPOKE.line, [SPOKE, JUNK]))
+    client.post("/api/frame", content=jpeg_bytes())
+    status = client.get("/api/status").json()
+    assert (status["objects"], status["speak"], status["error"]) == (2, SPOKE.line, False)

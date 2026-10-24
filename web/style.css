@@ -60,6 +60,7 @@ body.judge .sub { margin: 0 0 1rem; color: #888; font-size: .85rem; }
 .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
 .seg button:last-child { border-radius: 0 6px 6px 0; }
 .log-empty { color: #666; padding: 2rem 0; }
+.log-status { margin: 0 0 8px; color: #888; font-size: .8rem; }
 table { width: 100%; border-collapse: collapse; font-size: .85rem; color: #ddd; }
 th, td { text-align: left; padding: .45rem .55rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: #888; font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }

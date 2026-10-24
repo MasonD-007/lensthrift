@@ -53,7 +53,7 @@ def test_frame_returns_speak_and_logs_each_object(client):
     use(fake)
     r = client.post("/api/frame", content=jpeg_bytes(), headers={"Content-Type": "image/jpeg"})
     assert r.status_code == 200
-    assert r.json() == {"speak": "80 to 120 dollars, brass desk lamp."}
+    assert r.json() == {"speak": "80 to 120 dollars, brass desk lamp.", "objects": 2}
     assert fake.frames[0].mode == "RGB"
 
     rows = client.get("/api/log").json()
@@ -90,7 +90,7 @@ def test_empty_body_returns_400(client):
 def test_empty_frame_returns_empty_speak_and_no_log(client):
     use(FakePipeline("", []))
     r = client.post("/api/frame", content=jpeg_bytes())
-    assert r.json() == {"speak": ""}
+    assert r.json() == {"speak": "", "objects": 0}
     assert client.get("/api/log").json() == []
 
 

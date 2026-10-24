@@ -59,10 +59,22 @@
     empty.hidden = entries.length > 0;
   }
 
+  const statusEl = document.getElementById('status');
+
+  function renderStatus(s) {
+    if (!s || !s.ts) { statusEl.textContent = 'No frames received yet. Is the capture page open and steady?'; return; }
+    const age = Math.round((Date.now() - new Date(s.ts)) / 1000);
+    statusEl.textContent = s.error
+      ? 'Last frame ' + age + 's ago: pipeline error (see the backend terminal).'
+      : 'Last frame ' + age + 's ago: ' + s.objects + ' object(s) found, ' + s.ms + ' ms'
+        + (s.speak ? ', spoke: "' + s.speak + '"' : ', stayed quiet') + '.';
+  }
+
   async function poll() {
     try {
-      const r = await fetch('/api/log');
-      if (r.ok) render(await r.json());
+      const [log, status] = await Promise.all([fetch('/api/log'), fetch('/api/status')]);
+      if (status.ok) renderStatus(await status.json());
+      if (log.ok) render(await log.json());
     } catch (_) { /* backend restarting; try again */ }
     setTimeout(poll, POLL_MS);
   }

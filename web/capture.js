@@ -82,7 +82,7 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const reply = await r.json();
       speak(reply.speak);
-      setStatus(reply.speak ? 'spoke' : 'quiet');
+      setStatus(reply.speak ? 'spoke' : reply.objects + ' object(s), quiet');
     } catch (e) {
       setStatus('error: ' + e.message);
     } finally {

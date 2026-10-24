@@ -35,7 +35,7 @@ def load_settings(env: Mapping[str, str | None]) -> Settings:
     return Settings(
         gemini_api_key=get("GEMINI_API_KEY", ""),
         typesafe_api_key=get("TYPESAFE_API_KEY", ""),
-        gemini_model=get("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=get("GEMINI_MODEL", "gemini-3.8-flash"),
         gemini_json_mode=json_mode,
         gemini_send_image=get("GEMINI_SEND_IMAGE", "1") not in ("0", "false", "False"),
         jev_threshold=float(get("JEV_THRESHOLD", "0.5")),

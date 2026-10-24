@@ -1,0 +1,14 @@
+{
+  "pyrex mixing bowl": {
+    "tag": 5,
+    "low": 40,
+    "high": 60,
+    "sources": [{"title": "PLACEHOLDER: replace with real sold comps (#21)", "url": "https://example.com/pyrex"}]
+  },
+  "milk glass vase": {
+    "tag": 4,
+    "low": 25,
+    "high": 35,
+    "sources": [{"title": "PLACEHOLDER: replace with real sold comps (#21)", "url": "https://example.com/milk-glass"}]
+  }
+}

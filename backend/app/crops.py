@@ -25,6 +25,22 @@ def top_detections(dets: List[Detection], limit: int) -> List[Detection]:
     return sorted(dets, key=_area, reverse=True)[:limit]
 
 
+# Same ranking as web/stabilize.js: nearest the middle first, closer (bigger) objects next.
+IGNORE_LABELS = {"person"}  # the hand and body holding the item
+CENTER_WEIGHT = 0.6
+SIZE_WEIGHT = 0.4
+
+
+def target_score(det: Detection) -> float:
+    x0, y0, x1, y1 = det.box
+    dist = math.hypot((x0 + x1) / 2 - 0.5, (y0 + y1) / 2 - 0.5) / math.sqrt(0.5)
+    return CENTER_WEIGHT * (1 - min(1.0, dist)) + SIZE_WEIGHT * math.sqrt(_area(det))
+
+
+def rank_targets(dets: List[Detection]) -> List[Detection]:
+    return sorted((d for d in dets if d.label not in IGNORE_LABELS), key=target_score, reverse=True)
+
+
 def _pixel_box(size: Tuple[int, int], det: Detection, margin: float) -> Tuple[int, int, int, int]:
     w, h = size
     x0, y0, x1, y1 = det.box[0] * w, det.box[1] * h, det.box[2] * w, det.box[3] * h

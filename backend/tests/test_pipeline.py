@@ -1,3 +1,4 @@
+import dataclasses
 import io
 
 from PIL import Image, ImageDraw
@@ -73,14 +74,15 @@ class Fakes:
         return value
 
 
-def build(fakes, comps=None, memory=None):
+def build(fakes, comps=None, memory=None, max_boxes=5):
+    """Multi-object tests opt into several boxes; the app default is one object per frame."""
     return Pipeline(
         detect=fakes.detect,
         jev=fakes.jev,
         gemini=fakes.gemini,
         comps=comps or {},
         memory=memory or Memory(30),
-        settings=load_settings({}),
+        settings=dataclasses.replace(load_settings({}), max_boxes=max_boxes),
     )
 
 
@@ -119,9 +121,10 @@ async def test_two_winners_whispered_in_profit_order():
 async def test_same_item_in_two_boxes_spoken_once():
     img, dets = scene(LAMP, ("green", "vase", (360, 200, 520, 360)))
     lamp = quote("brass lamp", 80)
-    fakes = Fakes(dets, {"red": 0.9, "green": 0.9}, {"red": lamp, "green": quote("Brass  Lamp", 80)})
+    other = quote("Brass  Lamp", 80)
+    fakes = Fakes(dets, {"red": 0.9, "green": 0.9}, {"red": lamp, "green": other})
     line, results = await build(fakes).process_frame(img)
-    assert line == phrase(lamp)
+    assert line in (phrase(lamp), phrase(other))  # whichever box ranks first; spoken once either way
     assert sorted((r.decision, r.reason) for r in results) == [
         ("quiet", "duplicate in frame"),
         ("spoke", "resale beats tag"),
@@ -199,5 +202,21 @@ async def test_only_five_boxes_processed():
     _, results = await build(fakes).process_frame(img)
     assert len(results) == 5
     assert len(fakes.jev_calls) == 5
-    # largest boxes are the last ones drawn
-    assert {r.detection.label for r in results} == {f"obj{i}" for i in range(2, 7)}
+
+
+async def test_default_settings_price_one_object_nearest_the_middle():
+    assert load_settings({}).max_boxes == 1
+    img, dets = scene(("red", "vase", (20, 20, 160, 160)), ("blue", "cup", (260, 180, 380, 300)),
+                      ("green", "person", (200, 0, 440, 480)))
+    fakes = Fakes(dets, {"blue": 0.1, "red": 0.1}, {})
+    _, results = await build(fakes, max_boxes=1).process_frame(img)
+    assert [r.detection.label for r in results] == ["cup"]
+
+
+async def test_given_detection_skips_yolo():
+    img, dets = scene(LAMP, MUG)
+    fakes = Fakes([], {"red": 0.9}, {"red": quote("brass lamp", 80)})
+    fakes.detect = lambda img: (_ for _ in ()).throw(AssertionError("YOLO should not run"))
+    line, results = await build(fakes, max_boxes=1).process_frame(img, dets=[dets[0]])
+    assert [r.detection.label for r in results] == ["vase"]
+    assert line == phrase(quote("brass lamp", 80))

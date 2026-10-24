@@ -3,6 +3,7 @@ from collections import deque
 from datetime import datetime, timezone
 from functools import lru_cache, partial
 from pathlib import Path
+from typing import List, Optional
 
 import io
 import logging
@@ -113,12 +114,32 @@ def describe(r: ObjectResult) -> str:
     return f"  {r.detection.label} {r.detection.conf:.2f} | jev {jev}{price} | {r.decision}: {r.reason}"
 
 
+def parse_target(box: Optional[str], label: str, conf: float) -> Optional[List[Detection]]:
+    """`box=x1,y1,x2,y2` (normalized 0-1) from the page's stabilizer, or None to let YOLO pick."""
+    if box is None:
+        return None
+    try:
+        x1, y1, x2, y2 = (float(v) for v in box.split(","))
+    except ValueError:
+        raise HTTPException(400, "box must be x1,y1,x2,y2")
+    if not (0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1):
+        raise HTTPException(400, "box must be normalized 0-1 with x1 < x2 and y1 < y2")
+    return [Detection(label, conf, (x1, y1, x2, y2))]
+
+
 @app.post("/api/frame")
-async def frame(request: Request, pipeline: Pipeline = Depends(get_pipeline)) -> dict:
+async def frame(
+    request: Request,
+    box: Optional[str] = None,
+    label: str = "object",
+    conf: float = 1.0,
+    pipeline: Pipeline = Depends(get_pipeline),
+) -> dict:
     started = time.monotonic()
+    target = parse_target(box, label, conf)
     img = decode(await request.body())
     try:
-        line, results = await pipeline.process_frame(img)
+        line, results = await pipeline.process_frame(img, dets=target)
     except Exception:
         logger.exception("frame failed")
         last_frame.update(ts=datetime.now(timezone.utc).isoformat(), objects=0, speak="", error=True)

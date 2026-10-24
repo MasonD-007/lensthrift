@@ -6,7 +6,7 @@ def test_load_settings_reads_env_and_defaults():
     assert s.gemini_api_key == "g"
     assert s.typesafe_api_key == "t"
     assert s.jev_threshold == 0.5
-    assert s.max_boxes == 5
+    assert s.max_boxes == 1
     assert s.gemini_json_mode == "prompt"
 
     s = load_settings({"GEMINI_API_KEY": "g", "TYPESAFE_API_KEY": "t", "JEV_THRESHOLD": "0.7"})

@@ -59,3 +59,14 @@ def test_look_is_small_thumbnail_that_tracks_color():
     assert len(red) == 8 * 8 * 3
     assert red == look(frame(640, 480), det)
     assert red != blue
+
+
+def test_rank_targets_ignores_people_and_prefers_centered_then_closer():
+    from app.crops import rank_targets
+
+    person = Detection("person", 0.9, (0.1, 0.0, 0.9, 1.0))
+    edge = Detection("vase", 0.9, (0.0, 0.0, 0.4, 0.4))
+    far = Detection("cup", 0.9, (0.45, 0.45, 0.55, 0.55))
+    near = Detection("bowl", 0.9, (0.3, 0.3, 0.7, 0.7))
+    assert [d.label for d in rank_targets([person, edge, far, near])] == ["bowl", "cup", "vase"]
+    assert rank_targets([person]) == []

@@ -3,7 +3,11 @@
 Static pages served by the FastAPI backend. No build step.
 
 - `index.html` + `capture.js` + `stabilize.js`: the main page, run locally on the laptop at `http://localhost:8080`. Press Start. YOLO tracks what's in view and picks **one** object: the one nearest the middle, with closer (bigger) objects winning ties. People are ignored, since the hand and body holding the item would always be the biggest box. When that object has stayed put for **2 seconds**, the frame and its box go to `/api/frame`, and only that object is priced. The reply is spoken and shown as a caption.
-  - The badge on the camera shows each stage: **Searching**, then **Stabilizing cup 45%** (amber, filling with the countdown bar on the box), then **Stabilized: cup · pricing…**, then **Stabilized: cup · sent** (green). The result box then replaces the target box.
+  - The badge on the camera shows each stage: **Searching**, then **Stabilizing cup 45%** (amber, filling with the countdown bar on the box), then **Stabilized: cup · pricing…**, then **Stabilized: cup · sent** (green). The result box then replaces the target box, and the badge takes the result's color:
+    - **red: not resalable** (Jev stopped it): thick red outline, "Not resalable: cup" badge, red row in the log
+    - green: worth it (spoken)
+    - gray: priced but quiet (low confidence, doesn't beat the tag, spoken recently)
+    - purple: error (a Jev or Gemini call failed)
   - A held item is sent once. It's scanned again when it leaves and comes back, or when a different object takes the middle. Moving it restarts the countdown, and a missed YOLO frame (under 0.5 s) doesn't.
 - **Debug view** (the Debug button, or **D**; remembered per browser, and `?debug=1` / `?debug=0` override it):
   - every YOLO box (blue), plus the phase, target, hold time, round-trip time and counters

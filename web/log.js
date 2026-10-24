@@ -33,7 +33,8 @@
 
   function row(e, frameStart) {
     const decision = ['spoke', 'quiet', 'error'].includes(e.decision) ? e.decision : 'quiet';
-    const tr = el('tr', null, decision + (frameStart ? ' frame-start' : ''));
+    const junk = e.reason === 'not resalable' ? ' junk' : '';
+    const tr = el('tr', null, decision + junk + (frameStart ? ' frame-start' : ''));
 
     tr.append(el('td', new Date(e.ts).toLocaleTimeString()));
 

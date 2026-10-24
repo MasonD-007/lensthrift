@@ -1,18 +1,16 @@
-// Main page (local, laptop webcam): steady-frame check -> POST JPEG -> speak the reply.
-// The backend holds the keys and decides. D toggles the debug view: live YOLO boxes, how each
-// object was decided, timing, controls and the decision log.
+// Main page (local, laptop webcam): YOLO tracks what's in view, one object is picked (nearest the
+// middle, closer wins), and once it has been held still for about 2 s the frame and that object's
+// box go to the backend, which prices only that object. The reply is spoken.
+// D toggles the debug view: every YOLO box, timing, controls and the decision log.
 (() => {
   const FRAME_PX = 640;          // downscaled JPEG edge
   const JPEG_QUALITY = 0.7;
-  const TICK_MS = 250;           // steady-check cadence
-  const STEADY_MS = 1000;        // view must hold this long before we send
-  const STEADY_DIFF = 6;         // mean abs luma diff (0-255) under which we call it steady
   const DETECT_PX = 320;         // YOLO input edge
   const DETECT_MS = 100;         // pause between detect calls
-  const SAMPLE = 32;             // tiny grayscale grid for motion compare
   const CAPTION_MS = 6000;       // whisper caption stays this long
-  const OVERLAY_MS = 5000;       // decision boxes stay this long (or until the view moves)
   const COLORS = { spoke: '#3c6', quiet: '#999', error: '#e55' };
+  const PHASE_COLORS = { stabilizing: '#fb3', stabilized: '#3c6', sent: '#3c6' };
+  const HOLD_S = (Stabilize.HOLD_MS / 1000).toFixed(1);
 
   const $ = (id) => document.getElementById(id);
   const store = {
@@ -25,12 +23,14 @@
     if (cls) e.className = cls;
     return e;
   };
+  const pct = (p) => Math.round(p * 100) + '%';
 
   const video = $('video');
   const canvas = $('canvas');
   const preview = $('preview');
   const boxes = $('boxes');
   const decisions = $('decisions');
+  const phaseEl = $('phase');
   const startBtn = $('start');
   const statusEl = $('status');
   const captionEl = $('caption');
@@ -38,21 +38,17 @@
   const muteBtn = $('mute');
   const cameraSel = $('camera');
   const statsEl = $('stats');
-  const small = document.createElement('canvas');
-  small.width = small.height = SAMPLE;
 
+  const stabilizer = Stabilize.createStabilizer();
   let live = false;
   let stream = null;
-  let prev = null;
-  let lastDiff = 0;
-  let steadySince = 0;
   let inFlight = false;
-  let sentForThisHold = false;
   let debug = false;
   let muted = false;
   let lastLine = '';
+  let lastResult = '';           // what the backend said about the object just sent
   let captionTimer = null;
-  let overlayTimer = null;
+  let scan = { phase: 'searching', target: null, progress: 0 };
   const stats = { sent: 0, spoke: 0, errors: 0, rtt: null, lastError: '' };
 
   const setStatus = (msg) => { statusEl.textContent = msg; };
@@ -85,28 +81,10 @@
 
   // ---- Frames ----
 
-  // Center-crop to a square so we price what's in the middle, not the shelf.
+  // Center-crop to a square: YOLO boxes and the sent frame share these coordinates.
   function squareCrop(w, h) {
     const s = Math.min(w, h);
     return { sx: (w - s) / 2, sy: (h - s) / 2, s };
-  }
-
-  function lumaGrid() {
-    const { sx, sy, s } = squareCrop(video.videoWidth, video.videoHeight);
-    const ctx = small.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(video, sx, sy, s, s, 0, 0, SAMPLE, SAMPLE);
-    const d = ctx.getImageData(0, 0, SAMPLE, SAMPLE).data;
-    const out = new Uint8Array(SAMPLE * SAMPLE);
-    for (let i = 0; i < out.length; i++) {
-      out[i] = (d[i * 4] * 77 + d[i * 4 + 1] * 150 + d[i * 4 + 2] * 29) >> 8;
-    }
-    return out;
-  }
-
-  function meanDiff(a, b) {
-    let sum = 0;
-    for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
-    return sum / a.length;
   }
 
   function frameBlob(px = FRAME_PX) {
@@ -118,16 +96,26 @@
 
   // ---- Send ----
 
-  async function sendFrame() {
+  function frameUrl(target) {
+    if (!target) return '/api/frame'; // no target: the backend runs YOLO and picks one itself
+    const q = new URLSearchParams({
+      box: target.box.map((v) => Math.min(1, Math.max(0, v)).toFixed(4)).join(','),
+      label: target.label,
+      conf: target.conf.toFixed(3),
+    });
+    return '/api/frame?' + q;
+  }
+
+  async function sendFrame(target) {
     if (inFlight || !live) return;
     inFlight = true;
     stats.sent++;
-    setStatus('sending');
-    clearCanvas(boxes);
+    lastResult = '';
+    setStatus('Stabilized: ' + (target ? target.label : 'frame') + ', pricing…');
     renderStats();
     const t0 = performance.now();
     try {
-      const r = await fetch('/api/frame', {
+      const r = await fetch(frameUrl(target), {
         method: 'POST',
         headers: { 'Content-Type': 'image/jpeg' },
         body: await frameBlob(),
@@ -142,38 +130,80 @@
         showCaption(reply.speak);
         speak(reply.speak);
       }
-      setStatus(reply.speak ? 'spoke' : objects.length + ' object(s), quiet');
+      const o = objects[0];
+      lastResult = reply.speak ? 'spoke: ' + reply.speak
+        : o ? (o.item || o.label) + ': ' + o.decision + ' (' + o.reason + ')' : 'nothing to price';
       drawDecisions(objects);
       if (debug) LogView.refresh();
     } catch (e) {
       stats.errors++;
       stats.lastError = e.message;
-      setStatus('error: ' + e.message);
+      lastResult = 'error: ' + e.message;
     } finally {
       inFlight = false;
+      setStatus(lastResult);
       renderStats();
     }
   }
 
-  // ---- Steady check ----
+  // Space / Send now: price the current target right away (or let the backend pick).
+  function sendNow() {
+    if (scan.target) stabilizer.markSent();
+    sendFrame(scan.target);
+  }
 
-  function tick() {
-    if (video.readyState < 2) return;
-    const cur = lumaGrid();
-    const now = performance.now();
-    lastDiff = prev ? meanDiff(prev, cur) : Infinity;
-    const steady = lastDiff < STEADY_DIFF;
-    prev = cur;
-    if (!steady) {
-      steadySince = now;
-      sentForThisHold = false;
-      clearDecisions();
-    } else if (!inFlight && !sentForThisHold && now - steadySince >= STEADY_MS) {
-      // One send per steady hold, and never while a reply is still pending.
-      sentForThisHold = true;
-      sendFrame();
+  // ---- Tracking: every YOLO result feeds the stabilizer ----
+
+  function onDetections(dets, now) {
+    const wasSent = scan.phase === 'sent';
+    scan = stabilizer.update(dets, now);
+    if (wasSent && scan.phase !== 'sent') clearDecisions(); // a new object (or none): drop the old result
+    if (scan.phase === 'stabilized' && !inFlight) {
+      stabilizer.markSent();
+      sendFrame(scan.target);
+      scan = { ...scan, phase: 'sent' };
     }
-    if (debug) renderMeters(steady, now);
+    drawTracking(dets);
+    renderPhase();
+    if (!inFlight) setStatus(statusText());
+    if (debug) renderStats();
+  }
+
+  function statusText() {
+    const t = scan.target;
+    switch (scan.phase) {
+      case 'stabilizing': return 'Stabilizing ' + t.label + '… ' + (scan.progress * Stabilize.HOLD_MS / 1000).toFixed(1) + ' / ' + HOLD_S + ' s';
+      case 'stabilized': return 'Stabilized: ' + t.label;
+      case 'sent': return lastResult || 'Stabilized: ' + t.label + ', sent';
+      default: return 'Hold an item up to the camera';
+    }
+  }
+
+  function renderPhase() {
+    const { phase, target, progress } = scan;
+    phaseEl.hidden = !live;
+    phaseEl.dataset.phase = phase;
+    $('phase-text').textContent =
+      phase === 'searching' ? 'Searching'
+        : phase === 'stabilizing' ? 'Stabilizing ' + target.label + ' ' + pct(progress)
+          : 'Stabilized: ' + target.label + (inFlight || phase === 'stabilized' ? ' · pricing…' : ' · sent');
+    $('phase-fill').style.width = pct(phase === 'searching' ? 0 : progress);
+  }
+
+  async function detectLoop() {
+    if (live && !inFlight && video.readyState >= 2) {
+      try {
+        const r = await fetch('/api/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: await frameBlob(DETECT_PX),
+        });
+        if (r.ok) onDetections(await r.json(), performance.now());
+      } catch (_) {
+        onDetections([], performance.now()); // backend busy or restarting: the object counts as unseen
+      }
+    }
+    setTimeout(detectLoop, DETECT_MS);
   }
 
   // ---- Overlays (drawn on the sent center square) ----
@@ -187,15 +217,20 @@
   function clearCanvas(c) { c.getContext('2d').clearRect(0, 0, c.width, c.height); }
 
   function clearDecisions() {
-    clearTimeout(overlayTimer);
     clearCanvas(decisions);
+    decisions.dataset.drawn = '';
   }
 
-  function drawBox(ctx, [x1, y1, x2, y2], text, color, width) {
+  function drawBox(ctx, [x1, y1, x2, y2], text, color, width, progress) {
     const { width: w, height: h } = ctx.canvas;
     ctx.lineWidth = width;
     ctx.strokeStyle = color;
     ctx.strokeRect(x1 * w, y1 * h, (x2 - x1) * w, (y2 - y1) * h);
+    if (progress != null) { // countdown bar along the bottom edge of the box
+      ctx.fillStyle = color;
+      ctx.fillRect(x1 * w, y2 * h - 6, (x2 - x1) * w * progress, 6);
+    }
+    if (!text) return;
     ctx.font = '13px system-ui, sans-serif';
     ctx.textBaseline = 'top';
     const tw = Math.min(ctx.measureText(text).width + 8, w);
@@ -207,15 +242,26 @@
     ctx.fillText(text, tx + 4, ty + 3);
   }
 
-  function drawBoxes(dets) {
+  // Debug shows every YOLO box; both modes show the one target and its countdown.
+  function drawTracking(dets) {
     const ctx = fit(boxes);
-    for (const d of dets) drawBox(ctx, d.box, d.label + ' ' + Math.round(d.conf * 100) + '%', '#6cf', 1);
+    if (debug) {
+      for (const d of dets) {
+        if (scan.target && d.box === scan.target.box) continue;
+        drawBox(ctx, d.box, d.label + ' ' + pct(d.conf), '#6cf', 1);
+      }
+    }
+    const t = scan.target;
+    if (!t || scan.phase === 'searching') return;
+    if (scan.phase === 'sent' && !inFlight && decisions.dataset.drawn === '1') return; // result box shows instead
+    const label = scan.phase === 'stabilizing' ? t.label + ' · stabilizing ' + pct(scan.progress)
+      : t.label + ' · stabilized';
+    drawBox(ctx, t.box, label, PHASE_COLORS[scan.phase], 3, scan.progress);
   }
 
   function drawDecisions(objects) {
-    clearDecisions();
-    if (!debug || !objects.length) return;
     const ctx = fit(decisions);
+    decisions.dataset.drawn = objects.length ? '1' : '';
     for (const o of objects) {
       if (!o.box) continue;
       // Errors read "jev error: <Type>: <msg>"; the log has the detail, the frame only needs the stage.
@@ -224,41 +270,16 @@
       if (o.decision === 'spoke') text += ' · $' + Math.round(o.low) + '–$' + Math.round(o.high);
       drawBox(ctx, o.box, text, COLORS[o.decision] || COLORS.quiet, 3);
     }
-    overlayTimer = setTimeout(() => clearCanvas(decisions), OVERLAY_MS);
-  }
-
-  // YOLO preview boxes, only in debug mode and never while a frame is being priced.
-  let detecting = false;
-  async function detectLoop() {
-    if (!detecting && live && debug && !inFlight && video.readyState >= 2) {
-      detecting = true;
-      try {
-        const r = await fetch('/api/detect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'image/jpeg' },
-          body: await frameBlob(DETECT_PX),
-        });
-        if (r.ok && debug && !inFlight) drawBoxes(await r.json());
-      } catch (_) { /* backend busy; next loop */ }
-      detecting = false;
-    }
-    setTimeout(detectLoop, DETECT_MS);
   }
 
   // ---- Debug panel ----
 
-  function renderMeters(steady, now) {
-    const motion = Number.isFinite(lastDiff) ? lastDiff / STEADY_DIFF : 1;
-    const bar = $('steady-bar');
-    bar.style.width = Math.min(100, motion * 100) + '%';
-    bar.classList.toggle('over', !steady);
-    const hold = steady ? (now - steadySince) / STEADY_MS : 0;
-    $('hold-bar').style.width = Math.min(100, hold * 100) + '%';
-  }
-
   function renderStats() {
+    const t = scan.target;
     const rows = [
-      ['State', inFlight ? 'sending' : live ? 'listening' : 'stopped'],
+      ['Phase', inFlight ? 'stabilized, pricing' : scan.phase === 'sent' ? 'stabilized, sent' : scan.phase],
+      ['Target', t ? t.label + ' (YOLO ' + pct(t.conf) + ')' : '–'],
+      ['Hold', t ? (scan.progress * Stabilize.HOLD_MS / 1000).toFixed(1) + ' / ' + HOLD_S + ' s' : '–'],
       ['Round trip', stats.rtt == null ? '–' : stats.rtt + ' ms'],
       ['Frames sent', stats.sent],
       ['Whispers', stats.spoke],
@@ -280,10 +301,6 @@
     debugBtn.setAttribute('aria-pressed', String(on));
     store.set('tl-debug', on ? '1' : '0');
     LogView.setActive(on);
-    if (!on) {
-      clearCanvas(boxes);
-      clearDecisions();
-    }
     renderStats();
   }
 
@@ -297,6 +314,7 @@
   async function resetMemory() {
     try {
       const r = await fetch('/api/memory', { method: 'DELETE' });
+      stabilizer.reset(); // also lets the item in view be scanned again
       setStatus(r.ok ? 'memory cleared: cached quotes and cooldowns forgotten' : 'reset failed: HTTP ' + r.status);
     } catch (e) {
       setStatus('reset failed: ' + e.message);
@@ -315,7 +333,7 @@
     await video.play();
     preview.style.aspectRatio = video.videoWidth + ' / ' + video.videoHeight;
     preview.classList.toggle('portrait', video.videoHeight > video.videoWidth);
-    prev = null;
+    stabilizer.reset();
   }
 
   async function listCameras() {
@@ -333,7 +351,6 @@
     try {
       await startCamera(cameraSel.value);
       store.set('tl-camera', cameraSel.value);
-      setStatus('listening');
     } catch (e) {
       setStatus('camera failed: ' + e.message);
     }
@@ -343,7 +360,7 @@
 
   const blurAfter = (btn, fn) => btn.addEventListener('click', () => { btn.blur(); fn(); });
   blurAfter(debugBtn, () => setDebug(!debug));
-  blurAfter($('send-now'), sendFrame);
+  blurAfter($('send-now'), sendNow);
   blurAfter(muteBtn, () => setMuted(!muted));
   blurAfter($('replay'), () => speakNow(lastLine));
   blurAfter($('reset-memory'), resetMemory);
@@ -352,7 +369,7 @@
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('select, input, textarea')) return;
     switch (e.key.toLowerCase()) {
       case 'd': setDebug(!debug); break;
-      case ' ': e.preventDefault(); sendFrame(); break;
+      case ' ': e.preventDefault(); sendNow(); break;
       case 'm': setMuted(!muted); break;
       case 'r': speakNow(lastLine); break;
       default: return;
@@ -384,13 +401,13 @@
     live = true;
     startBtn.hidden = true;
     document.body.classList.add('live');
-    setStatus('listening');
+    setStatus(statusText());
+    renderPhase();
     listCameras();
     keepAwake();
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') keepAwake();
     });
-    setInterval(tick, TICK_MS);
     detectLoop();
     renderStats();
   });

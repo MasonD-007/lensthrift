@@ -187,7 +187,8 @@ final class CameraModel: ObservableObject {
             let reply = try await client.frame(jpeg: jpeg)
             frameLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
             if reply.speak.isEmpty {
-                lastReply = "Quiet (\(reply.objects ?? 0) objects)"
+                let priced = reply.objects.first { $0.low != nil }
+                lastReply = "Quiet · " + (priced?.summary ?? "\(reply.objectCount) objects")
             } else {
                 lastReply = "“\(reply.speak)”"
                 // Capture may have been stopped while the reply was on its way.

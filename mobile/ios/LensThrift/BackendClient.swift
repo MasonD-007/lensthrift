@@ -58,7 +58,41 @@ struct BackendClient: Sendable {
     /// The pipeline's answer for one frame: the line to say (empty means stay quiet).
     struct FrameReply: Decodable, Sendable {
         let speak: String
-        let objects: Int?
+        /// Per-object results. Older backends sent only a count; that decodes as no details.
+        let objects: [FrameObject]
+        let objectCount: Int
+
+        private enum CodingKeys: String, CodingKey {
+            case speak, objects
+        }
+
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            speak = try c.decodeIfPresent(String.self, forKey: .speak) ?? ""
+            if let list = try? c.decode([FrameObject].self, forKey: .objects) {
+                objects = list
+                objectCount = list.count
+            } else {
+                objects = []
+                objectCount = (try? c.decode(Int.self, forKey: .objects)) ?? 0
+            }
+        }
+    }
+
+    /// One row of `/api/frame`'s `objects` (see `log_row` in backend/app/main.py).
+    struct FrameObject: Decodable, Sendable {
+        let label: String?
+        let item: String?
+        let low: Double?
+        let high: Double?
+        let decision: String?
+
+        /// "umbrella $3–8", or the YOLO label when nothing was priced.
+        var summary: String {
+            let name = item ?? label ?? "object"
+            guard let low, let high else { return name }
+            return "\(name) $\(Int(low))–\(Int(high))"
+        }
     }
 
     /// Runs the full pipeline (YOLO → Jev → Gemini → decide) on one frame.

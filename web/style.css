@@ -1,34 +1,77 @@
-:root { color-scheme: dark; --bg: #000; --fg: #8a8a8a; --accent: #3a7; }
+:root { color-scheme: dark; --bg: #000; --fg: #8a8a8a; --accent: #3a7; --error: #e55; --line: #222; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+button, select { font: inherit; font-size: .85rem; color: #ccc; background: #111; border: 1px solid #333;
+  border-radius: 6px; padding: .35rem .7rem; cursor: pointer; }
+button:hover, select:hover { border-color: #555; }
+button[aria-pressed="true"] { background: #143; border-color: var(--accent); color: #7e9; }
 
-/* Capture page: the wearer never looks at it, so keep it nearly black. */
-body.capture { height: 100vh; display: grid; place-items: center; }
-body.capture main { text-align: center; }
-#start { font: inherit; font-size: 1.5rem; padding: 1rem 2.5rem; border-radius: 999px;
-  border: 1px solid #333; background: #111; color: var(--fg); }
+/* Main page */
+body.capture { min-height: 100vh; }
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; }
+.brand { color: #ddd; font-weight: 600; letter-spacing: .02em; }
+.layout { display: grid; gap: 16px; justify-items: center; padding: 0 16px 16px; }
+body.debug .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; justify-items: stretch; }
+@media (max-width: 1000px) { body.debug .layout { grid-template-columns: minmax(0, 1fr); } }
+.stage { width: min(100%, 960px); text-align: center; }
+.debug-only { display: none; }
+body.debug .debug-only { display: block; }
+
+#start { font-size: 1.5rem; padding: 1rem 2.5rem; border-radius: 999px; margin-top: 20vh; }
 #start[hidden] { display: none; }
-#status { margin: 1rem 0 0; font-size: .8rem; opacity: .5; }
-/* Dev preview: shows the center square that actually gets sent. Add ?dark to hide it for the demo. */
-#preview { display: none; position: relative; width: min(90vmin, 640px); aspect-ratio: 1; margin: 0 auto 1rem;
-  overflow: hidden; border: 1px solid #333; background: #111; }
+#preview { display: none; position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden;
+  border: 1px solid #333; border-radius: 8px; background: #111; }
 body.live #preview { display: block; }
-body.dark #preview { display: none; }
-#boxes { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-#video { width: 100%; height: 100%; object-fit: cover; }
+#video { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* The center square is what gets sent; boxes are drawn in its coordinates. */
+#square { position: absolute; top: 0; left: 50%; height: 100%; aspect-ratio: 1; transform: translateX(-50%);
+  outline: 1px dashed rgba(255, 255, 255, .3); }
+#preview.portrait #square { top: 50%; left: 0; width: 100%; height: auto; transform: translateY(-50%); }
+#square canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#caption { min-height: 1.6em; margin: .75rem 0 0; font-size: 1.3rem; color: #eee; opacity: 0; transition: opacity .4s; }
+#caption.show { opacity: 1; }
+#status { margin: .25rem 0 0; font-size: .8rem; opacity: .6; }
+
+.panel { margin-top: 1rem; padding: 12px; border: 1px solid var(--line); border-radius: 8px; text-align: left; font-size: .85rem; }
+body.debug .panel.debug-only { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.meters { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; }
+.meter { height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden; }
+.meter > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+#steady-bar.over { background: #c93; }
+#stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
+#stats dt { color: #666; }
+#stats dd { margin: 0; color: #ccc; overflow-wrap: anywhere; }
+.controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.controls select { flex: 1 1 12rem; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.keys { margin: 0; color: #555; font-size: .75rem; }
+#log { min-width: 0; }
+body.debug #log { max-height: calc(100vh - 80px); overflow: auto; position: sticky; top: 16px; }
+body.capture #log .opt { display: none; }
 
 /* Judge page */
 body.judge { padding: 16px; max-width: 1100px; margin: 0 auto; color: #ddd; }
 body.judge h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
 body.judge .sub { margin: 0 0 1rem; color: #888; font-size: .85rem; }
-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #222; vertical-align: top; }
-th { color: #888; font-weight: 500; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+
+/* Decision log (log.js) */
+.log-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.log-empty { color: #666; padding: 2rem 0; }
+.log-status { margin: 0 0 8px; color: #888; font-size: .8rem; }
+table { width: 100%; border-collapse: collapse; font-size: .85rem; color: #ddd; }
+th, td { text-align: left; padding: .45rem .55rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: #888; font-weight: 500; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+td .sub { color: #888; font-size: .8rem; }
+tr.frame-start td { border-top: 2px solid #444; }
 tr.spoke td:first-child { border-left: 3px solid var(--accent); }
+tr.error td:first-child { border-left: 3px solid var(--error); }
 tr.quiet { color: #888; }
 .pill { display: inline-block; padding: 0 .5rem; border-radius: 999px; font-size: .75rem; background: #222; }
 tr.spoke .pill { background: #143; color: #7e9; }
+tr.error .pill { background: #411; color: #f99; }
 .src a { color: #8ab; display: block; overflow-wrap: anywhere; }
 .line { font-style: italic; }
-#empty { color: #666; padding: 2rem 0; }
-@media (max-width: 700px) { .hide-sm { display: none; } }
+@media (max-width: 700px) { .opt { display: none; } }

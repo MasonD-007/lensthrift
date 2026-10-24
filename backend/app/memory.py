@@ -46,6 +46,12 @@ class Memory:
     def mark_spoken(self, name: str) -> None:
         self._spoken[normalize(name)] = self.clock()
 
+    def clear(self) -> None:
+        """Forget every quote, cooldown and look (for re-testing during tuning)."""
+        self._quotes.clear()
+        self._spoken.clear()
+        self._looks.clear()
+
     def remember_look(self, label: str, look: bytes, name: str) -> None:
         self._looks[label].append((look, normalize(name)))
 

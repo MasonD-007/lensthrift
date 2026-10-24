@@ -47,3 +47,14 @@ def test_look_ignores_other_label_and_different_crop():
     m.remember_look("vase", bytes([100] * 192), "brass lamp")
     assert m.name_for_look("cup", bytes([100] * 192)) is None
     assert m.name_for_look("vase", bytes([200] * 192)) is None
+
+
+def test_memory_clear_forgets_quotes_cooldown_and_looks(make_quote):
+    m = Memory(30, FakeClock())
+    m.put_quote("lamp", make_quote(name="lamp"))
+    m.mark_spoken("lamp")
+    m.remember_look("vase", bytes([100] * 192), "lamp")
+    m.clear()
+    assert m.get_quote("lamp") is None
+    assert not m.recently_spoken("lamp")
+    assert m.name_for_look("vase", bytes([100] * 192)) is None

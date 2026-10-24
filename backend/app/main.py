@@ -11,7 +11,7 @@ import time
 from logging.handlers import RotatingFileHandler
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from google import genai
 from PIL import Image
 from ultralytics import YOLO
@@ -91,6 +91,7 @@ def log_row(ts: str, r: ObjectResult) -> dict:
         "ts": ts,
         "label": r.detection.label,
         "yolo_conf": r.detection.conf,
+        "box": list(r.detection.box),
         "jev": r.jev,
         "item": q.name if q else None,
         "description": q.description if q else None,
@@ -124,15 +125,16 @@ async def frame(request: Request, pipeline: Pipeline = Depends(get_pipeline)) ->
         raise
     ms = round((time.monotonic() - started) * 1000)
     ts = datetime.now(timezone.utc).isoformat()
+    rows = [log_row(ts, r) for r in results]
     logger.info("frame %dx%d: %d object(s) in %d ms%s", img.width, img.height, len(results), ms,
                 f' -> SPEAK "{line}"' if line else "")
-    for r in results:
+    for r, row in zip(results, rows):
         logger.info(describe(r))
-        logger.debug("row %s", json.dumps(log_row(ts, r), default=str))
+        logger.debug("row %s", json.dumps(row, default=str))
     last_frame.update(ts=ts, objects=len(results), speak=line, ms=ms, error=False)
-    for r in reversed(results):  # keep the frame's own order at the top of the log
-        log.appendleft(log_row(ts, r))
-    return {"speak": line, "objects": len(results)}
+    for row in reversed(rows):  # keep the frame's own order at the top of the log
+        log.appendleft(row)
+    return {"speak": line, "objects": rows}
 
 
 @app.post("/api/detect")
@@ -150,6 +152,20 @@ def get_status() -> dict:
 @app.get("/api/log")
 def get_log() -> list[dict]:
     return list(log)
+
+
+@app.delete("/api/log", status_code=204)
+def clear_log() -> Response:
+    log.clear()
+    return Response(status_code=204)
+
+
+@app.delete("/api/memory", status_code=204)
+def clear_memory() -> Response:
+    """Forget cached quotes and cooldowns. Never builds the pipeline just to clear it."""
+    if get_pipeline.cache_info().currsize:
+        get_pipeline().memory.clear()
+    return Response(status_code=204)
 
 
 # Registered last so /api routes win.

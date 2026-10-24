@@ -1,4 +1,5 @@
 import io
+from functools import lru_cache
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +10,7 @@ from app.config import load_settings
 from app.models import Detection, ObjectResult, Quote
 
 ROW_FIELDS = {
-    "ts", "label", "yolo_conf", "jev", "item", "description", "tag", "low", "high",
+    "ts", "label", "yolo_conf", "box", "jev", "item", "description", "tag", "low", "high",
     "confidence", "source", "sources", "decision", "reason", "line",
 }
 
@@ -53,7 +54,7 @@ def test_frame_returns_speak_and_logs_each_object(client):
     use(fake)
     r = client.post("/api/frame", content=jpeg_bytes(), headers={"Content-Type": "image/jpeg"})
     assert r.status_code == 200
-    assert r.json() == {"speak": "80 to 120 dollars, brass desk lamp."}
+    assert r.json()["speak"] == "80 to 120 dollars, brass desk lamp."
     assert fake.frames[0].mode == "RGB"
 
     rows = client.get("/api/log").json()
@@ -90,7 +91,7 @@ def test_empty_body_returns_400(client):
 def test_empty_frame_returns_empty_speak_and_no_log(client):
     use(FakePipeline("", []))
     r = client.post("/api/frame", content=jpeg_bytes())
-    assert r.json() == {"speak": ""}
+    assert r.json() == {"speak": "", "objects": []}
     assert client.get("/api/log").json() == []
 
 
@@ -104,3 +105,46 @@ def test_frame_without_keys_returns_503(client, monkeypatch):
     r = client.post("/api/frame", content=jpeg_bytes())
     assert r.status_code == 503
     assert "GEMINI_API_KEY" in r.json()["detail"]
+
+
+def test_frame_returns_objects_with_boxes(client):
+    use(FakePipeline(SPOKE.line, [SPOKE, JUNK]))
+    body = client.post("/api/frame", content=jpeg_bytes()).json()
+    assert body["speak"] == SPOKE.line
+    objects = body["objects"]
+    assert [o["label"] for o in objects] == ["vase", "chair"]
+    assert all(set(o) == ROW_FIELDS for o in objects)
+    assert objects[0]["box"] == [0, 0, 0.5, 0.5]
+    assert objects == client.get("/api/log").json()
+
+
+def test_delete_log_clears_rows(client):
+    use(FakePipeline("", [JUNK]))
+    client.post("/api/frame", content=jpeg_bytes())
+    assert client.delete("/api/log").status_code == 204
+    assert client.get("/api/log").json() == []
+
+
+class FakeMemory:
+    def __init__(self):
+        self.cleared = 0
+
+    def clear(self):
+        self.cleared += 1
+
+
+def test_delete_memory_clears_built_pipeline(client, monkeypatch):
+    fake = FakePipeline("", [])
+    fake.memory = FakeMemory()
+    built = lru_cache(maxsize=None)(lambda: fake)
+    built()  # a frame has already built the pipeline
+    monkeypatch.setattr(main, "get_pipeline", built)
+    assert client.delete("/api/memory").status_code == 204
+    assert fake.memory.cleared == 1
+
+
+def test_delete_memory_without_pipeline_does_not_build_one(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(main, "get_pipeline", lru_cache(maxsize=None)(lambda: calls.append(1)))
+    assert client.delete("/api/memory").status_code == 204
+    assert calls == []

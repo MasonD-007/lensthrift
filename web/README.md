@@ -2,15 +2,21 @@
 
 Static pages served by the FastAPI backend. No build step.
 
-- `index.html` + `capture.js`: phone page. Tap Start, rear camera runs, a center-cropped 640px JPEG is sent once the view holds steady for about a second. Speaks the reply; stays silent when `speak` is empty.
-- `judge.html` + `judge.js`: laptop view of every decision.
+- `index.html` + `capture.js`: the main page, run locally on the laptop at `http://localhost:8080`. Press Start; the webcam runs, and a center-cropped 640px JPEG (the dashed square) is sent once the view holds steady for about a second. The reply is spoken and shown as a caption.
+- **Debug view** (the Debug button, or **D**; remembered per browser, and `?debug=1` / `?debug=0` override it):
+  - live YOLO boxes, plus each object's decision drawn on the frame (green spoke, gray quiet, red error)
+  - motion and hold meters, round-trip time, and counters
+  - controls: Send now, Mute, Replay, Reset memory, and a camera picker
+  - the decision log beside the camera
+- Keys: **D** debug, **Space** send now, **M** mute, **R** replay.
+- `log.js`: the decision log view (filters, pause, clear), used by the debug panel and by `judge.html`, a standalone copy for a second window.
 
 ## Backend contract
 
 `POST /api/frame` (body: `image/jpeg`) returns:
 
 ```json
-{ "speak": "40 to 60 dollars, white milk glass mixing bowl. 25 to 35 dollars, milk glass vase." }
+{ "speak": "40 to 60 dollars, white milk glass mixing bowl.", "objects": [ /* one log row per object, as below */ ] }
 ```
 
 `speak` joins every item worth a whisper in the frame, biggest profit first, and is empty when nothing is. A body that isn't an image returns `400`; missing API keys return `503`.
@@ -20,7 +26,7 @@ Static pages served by the FastAPI backend. No build step.
 ```json
 [{
   "ts": "2026-10-24T14:02:11+00:00",
-  "label": "bowl", "yolo_conf": 0.71,
+  "label": "bowl", "yolo_conf": 0.71, "box": [0.31, 0.22, 0.68, 0.71],
   "jev": 0.93,
   "item": "milk glass mixing bowl", "description": "white milk glass mixing bowl",
   "tag": 5, "low": 40, "high": 60, "confidence": 0.82,
@@ -32,17 +38,17 @@ Static pages served by the FastAPI backend. No build step.
 }]
 ```
 
-- `label`, `yolo_conf`: the YOLO box. `jev`: Jev's resalable probability (`null` if the Jev call failed).
+- `label`, `yolo_conf`, `box`: the YOLO box (normalized xyxy, 0-1 of the sent square). `jev`: Jev's resalable probability (`null` if the Jev call failed).
 - `item` through `sources` are `null` (or `[]`) when the object stopped before pricing: junk at Jev, or an error.
 - `decision` is `spoke`, `quiet`, or `error`. `source` is `search` or `comps`.
 - `reason` is one of `resale beats tag`, `not resalable`, `low confidence`, `resale does not beat tag`, `spoken recently`, `duplicate in frame`, or `jev error: ...` / `gemini error: ...`.
 
+`DELETE /api/log` empties the log. `DELETE /api/memory` forgets cached quotes and the 30 s spoken cooldown, so an item can be re-tested right away. Both return `204`.
+
 ## Run
 
-The camera needs HTTPS. Serve `web/` from the backend, then tunnel:
-
 ```
-ngrok http 8080    # or: cloudflared tunnel --url http://localhost:8080
+make run    # then open http://localhost:8080
 ```
 
-Open the tunnel URL on the phone, set Auto-Lock to Never, tap Start. Open `/judge.html` on the laptop.
+Press Start, allow the camera, and press **D** for the debug view.

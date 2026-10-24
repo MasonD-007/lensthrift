@@ -2,18 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#000000">
 <title>Thrift Lens</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="capture">
-<main>
-  <div id="preview"><video id="video" playsinline muted autoplay></video><canvas id="boxes"></canvas></div>
-  <button id="start" type="button">Start</button>
-  <p id="status" aria-live="polite"></p>
+<header class="topbar">
+  <span class="brand">Thrift Lens</span>
+  <button id="debug-toggle" type="button" aria-pressed="false" title="Debug view (D)">Debug</button>
+</header>
+<main class="layout">
+  <section class="stage">
+    <div id="preview">
+      <video id="video" playsinline muted autoplay></video>
+      <div id="square"><canvas id="boxes"></canvas><canvas id="decisions"></canvas></div>
+    </div>
+    <button id="start" type="button">Start</button>
+    <p id="caption" aria-live="polite"></p>
+    <p id="status"></p>
+    <div class="panel debug-only">
+      <div class="meters">
+        <span>Motion</span><span class="meter"><span id="steady-bar"></span></span>
+        <span>Hold</span><span class="meter"><span id="hold-bar"></span></span>
+      </div>
+      <dl id="stats"></dl>
+      <div class="controls">
+        <button id="send-now" type="button" title="Space">Send now</button>
+        <button id="mute" type="button" aria-pressed="false" title="M">Mute</button>
+        <button id="replay" type="button" title="R">Replay</button>
+        <button id="reset-memory" type="button" title="Forget cached quotes and the 30 s cooldown">Reset memory</button>
+        <select id="camera" aria-label="Camera"></select>
+      </div>
+      <p class="keys">D debug · Space send now · M mute · R replay</p>
+    </div>
+  </section>
+  <aside id="log" class="debug-only" aria-label="Decision log"></aside>
 </main>
 <canvas id="canvas" hidden></canvas>
+<script src="log.js"></script>
 <script src="capture.js"></script>
 </body>
 </html>

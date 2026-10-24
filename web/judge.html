@@ -3,20 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Thrift Lens Judge Log</title>
+<title>Thrift Lens Decision Log</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="judge">
-<h1>Thrift Lens: judge log</h1>
-<p class="sub">Live decisions from the wearable. Not part of the user experience.</p>
-<div id="empty">Waiting for the first frame…</div>
-<table id="table" hidden>
-  <thead><tr>
-    <th>Time</th><th>Seen</th><th>Jev</th><th>Item</th><th>Tag</th><th>Resale</th>
-    <th class="hide-sm">Conf.</th><th>Decision</th><th class="hide-sm">Sources</th>
-  </tr></thead>
-  <tbody id="rows"></tbody>
-</table>
-<script src="judge.js"></script>
+<h1>Thrift Lens: decision log</h1>
+<p class="sub">One row per object the camera sent: spoken, quiet or error. The same log shows beside the camera in debug mode.</p>
+<div id="log"></div>
+<script src="log.js"></script>
+<script>LogView.mount(document.getElementById('log'));</script>
 </body>
 </html>

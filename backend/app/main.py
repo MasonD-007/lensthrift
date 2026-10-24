@@ -7,6 +7,7 @@ from typing import List, Optional
 
 import base64
 import io
+import itertools
 import logging
 import json
 import time
@@ -58,6 +59,29 @@ app = FastAPI(title="Thrift Lens")
 log: deque[dict] = deque(maxlen=LOG_SIZE)  # newest first
 latest_look: dict = {}  # newest frame the phone sent to /api/detect, for the /phonelook page
 last_frame: dict = {}  # most recent /api/frame outcome, shown on the judge page
+
+# Objects the phone's camera has detected, for the /objects.html feed. Oldest first.
+SEEN_GAP_S = 1.0  # rescanning appends again; only an object held in view (seen within this gap) is not repeated
+seen: deque[dict] = deque(maxlen=500)
+seen_ids = itertools.count(1)
+last_seen: dict[str, float] = {}
+
+
+def record_seen(detections: list[Detection]) -> None:
+    """Append each label that just came into view. Duplicates are fine: a rescan appends again."""
+    now = time.monotonic()
+    best: dict[str, float] = {}
+    for d in detections:
+        best[d.label] = max(best.get(d.label, 0.0), d.conf)
+    for label, conf in best.items():
+        if now - last_seen.get(label, float("-inf")) > SEEN_GAP_S:
+            seen.append({
+                "id": next(seen_ids),
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "label": label,
+                "conf": conf,
+            })
+        last_seen[label] = now
 
 
 def decode(body: bytes) -> Image.Image:
@@ -185,10 +209,17 @@ async def detect(request: Request) -> list[dict]:
     body = await request.body()
     img = decode(body)
     found = await run_in_threadpool(yolo_detect, img)  # keep inference off the event loop
+    record_seen(found)
     dets = [{"label": d.label, "conf": d.conf, "box": list(d.box)} for d in found]
     latest_look.update(jpeg=body, detections=dets, at=time.monotonic(),
                        client=parse_client_state(request.headers.get("x-lens-state")))
     return dets
+
+
+@app.get("/api/seen")
+def get_seen(after: int = 0) -> list[dict]:
+    """Detected objects with id greater than `after`, oldest first."""
+    return [s for s in seen if s["id"] > after]
 
 
 @app.get("/api/phonelook")

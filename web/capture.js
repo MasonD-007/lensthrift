@@ -7,6 +7,7 @@
   const JPEG_QUALITY = 0.7;
   const DETECT_PX = 320;         // YOLO input edge
   const DETECT_MS = 100;         // pause between detect calls
+  const VIEW_POLL_MS = 150;      // /phonelook refresh
   const CAPTION_MS = 6000;       // whisper caption stays this long
   // Result colors: red means Jev judged it not resalable; errors are purple so they don't read as junk.
   const COLORS = { spoke: '#3c6', quiet: '#999', junk: '#e33', error: '#b7f' };
@@ -14,6 +15,10 @@
   const SOUND_CHECK = 'Sound check. Forty to sixty dollars, milk glass mixing bowl.';
   const PHASE_COLORS = { stabilizing: '#fb3', stabilized: '#3c6', sent: '#3c6' };
   const HOLD_S = (Stabilize.HOLD_MS / 1000).toFixed(1);
+
+  // /phonelook runs this same page as a read-only mirror of the phone: no camera, and every overlay,
+  // the scan badge, the stats and the log come from what the phone reports to the backend.
+  const VIEWER = document.body.classList.contains('viewer');
 
   const $ = (id) => document.getElementById(id);
   const store = {
@@ -53,21 +58,54 @@
   let result = null;             // { kind, name, reason } for the badge: spoke | quiet | junk | error
   let captionTimer = null;
   let scan = { phase: 'searching', target: null, progress: 0 };
-  const stats = { sent: 0, spoke: 0, errors: 0, rtt: null, lastError: '' };
+  let lastObjects = [];          // the priced objects drawn on the frame; the mirror redraws them
+  const stats = { sent: 0, spoke: 0, errors: 0, rtt: null, detectMs: null, lastError: '' };
+
+  // ---- Pocket mode: a fully black, touch-swallowing cover so the phone can ride in a pocket.
+  // The camera, backend calls and speech keep running underneath. Press and hold 1.5 s to leave.
+  const pocketEl = $('pocket');
+  const pocketParam = new URLSearchParams(location.search).get('pocket');
+  const pocketDefault = pocketParam ? pocketParam === '1' : matchMedia('(pointer: coarse)').matches;
+  let pocketHold = null;
+
+  function setPocket(on) {
+    document.body.classList.toggle('pocket', on);
+    pocketEl.hidden = !on;
+  }
+
+  pocketEl.addEventListener('touchstart', () => { pocketHold = setTimeout(() => setPocket(false), 1500); }, { passive: true });
+  for (const ev of ['touchend', 'touchcancel']) pocketEl.addEventListener(ev, () => clearTimeout(pocketHold), { passive: true });
+  pocketEl.addEventListener('contextmenu', (e) => e.preventDefault());
+  $('pocket-btn').addEventListener('click', () => setPocket(true));
 
   const setStatus = (msg) => { statusEl.textContent = msg; };
 
   // ---- Speech and caption ----
 
+  // Primary path: the backend renders the line to WAV and an <audio> element plays it. iOS reliably plays an
+  // element unlocked by the Start tap, where speechSynthesis can be muted. Browser speech is the fallback.
+  const audioEl = new Audio();
+  audioEl.preload = 'auto';
+
   function speakNow(text) {
     if (!text) return;
+    audioEl.src = '/api/tts?text=' + encodeURIComponent(text);
+    audioEl.play().catch((e) => {
+      stats.lastError = 'audio: ' + e.name;
+      speakBrowser(text);
+    });
+  }
+
+  function speakBrowser(text) {
     if (!('speechSynthesis' in window)) {
       setStatus('this browser has no speech: try Chrome, Safari or Firefox');
       return;
     }
-    speechSynthesis.cancel();
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+    speechSynthesis.resume(); // iOS can leave the queue paused
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1.1;
+    u.volume = 1;
     u.onerror = (e) => { // 'interrupted' / 'canceled' just mean a newer line took over
       if (e.error !== 'interrupted' && e.error !== 'canceled') setStatus('speech failed: ' + e.error);
     };
@@ -78,9 +116,8 @@
 
   // Browsers only allow audio after a user gesture; Start (or Test sound) unlocks speech and tones.
   function unlockSpeech() {
-    const u = new SpeechSynthesisUtterance(' ');
-    u.volume = 0;
-    speechSynthesis.speak(u);
+    // An audible "ready" (not a silent blank) is what reliably unlocks iOS speech, and tells the wearer it's live.
+    speakNow('Ready');
     unlockTones();
   }
 
@@ -166,7 +203,7 @@
   }
 
   async function sendFrame(target) {
-    if (inFlight || !live) return;
+    if (VIEWER || inFlight || !live) return;
     inFlight = true;
     stats.sent++;
     lastResult = '';
@@ -197,6 +234,7 @@
         : !o ? 'nothing to price'
           : result.kind === 'junk' ? result.name + ': not resalable'
             : result.name + ': ' + o.decision + ' (' + o.reason + ')';
+      lastObjects = objects;
       drawDecisions(objects);
       if (debug) LogView.refresh();
     } catch (e) {
@@ -273,18 +311,40 @@
   async function detectLoop() {
     if (live && !inFlight && video.readyState >= 2) {
       try {
+        const body = await frameBlob(DETECT_PX);
+        const t0 = performance.now();
         const r = await fetch('/api/detect', {
           method: 'POST',
-          headers: { 'Content-Type': 'image/jpeg' },
-          body: await frameBlob(DETECT_PX),
+          headers: { 'Content-Type': 'image/jpeg', 'X-Lens-State': clientState() },
+          body,
         });
-        if (r.ok) onDetections(await r.json(), performance.now());
+        const dets = r.ok ? await r.json() : null;
+        const ms = performance.now() - t0;
+        stats.detectMs = Math.round(stats.detectMs == null ? ms : stats.detectMs * 0.8 + ms * 0.2);
+        if (dets) onDetections(dets, performance.now());
       } catch (_) {
         onDetections([], performance.now()); // backend busy or restarting: the object counts as unseen
       }
     }
     setTimeout(detectLoop, DETECT_MS);
   }
+
+  // The phone's debug-view state, URL-encoded JSON riding on each detect request so /phonelook mirrors it.
+  function clientState() {
+    const t = scan.target;
+    return encodeURIComponent(JSON.stringify({
+      scan: { phase: scan.phase, progress: scan.progress, target: t && { label: t.label, conf: t.conf, box: t.box } },
+      inFlight,
+      result,
+      lastResult,
+      objects: lastObjects.map((o) => ({
+        label: o.label, item: o.item, reason: o.reason, decision: o.decision, low: o.low, high: o.high, box: o.box,
+      })),
+      stats,
+    }));
+  }
+
+  const sameBox = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
 
   // ---- Overlays (drawn on the sent center square) ----
 
@@ -297,6 +357,7 @@
   function clearCanvas(c) { c.getContext('2d').clearRect(0, 0, c.width, c.height); }
 
   function clearDecisions() {
+    lastObjects = [];
     clearCanvas(decisions);
     decisions.dataset.drawn = '';
   }
@@ -327,7 +388,7 @@
     const ctx = fit(boxes);
     if (debug) {
       for (const d of dets) {
-        if (scan.target && d.box === scan.target.box) continue;
+        if (scan.target && sameBox(d.box, scan.target.box)) continue;
         drawBox(ctx, d.box, d.label + ' ' + pct(d.conf), '#6cf', 1);
       }
     }
@@ -366,6 +427,7 @@
       ['Target', t ? t.label + ' (YOLO ' + pct(t.conf) + ')' : '–'],
       ['Hold', t ? (scan.progress * Stabilize.HOLD_MS / 1000).toFixed(1) + ' / ' + HOLD_S + ' s' : '–'],
       ['Round trip', stats.rtt == null ? '–' : stats.rtt + ' ms'],
+      ['Detect call', stats.detectMs == null ? '–' : stats.detectMs + ' ms'],
       ['Frames sent', stats.sent],
       ['Whispers', stats.spoke],
       ['Request errors', stats.errors],
@@ -384,14 +446,14 @@
     debug = on;
     document.body.classList.toggle('debug', on);
     debugBtn.setAttribute('aria-pressed', String(on));
-    store.set('tl-debug', on ? '1' : '0');
+    if (!VIEWER) store.set('tl-debug', on ? '1' : '0');
     LogView.setActive(on);
     renderStats();
   }
 
   function setMuted(on) {
     muted = on;
-    if (on) speechSynthesis.cancel();
+    if (on) { audioEl.pause(); speechSynthesis.cancel(); }
     muteBtn.textContent = on ? 'Unmute' : 'Mute';
     muteBtn.setAttribute('aria-pressed', String(on));
   }
@@ -411,7 +473,7 @@
   async function startCamera(deviceId) {
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = await navigator.mediaDevices.getUserMedia({
-      video: deviceId ? { deviceId: { exact: deviceId } } : true,
+      video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } },
       audio: false,
     });
     video.srcObject = stream;
@@ -452,6 +514,7 @@
   blurAfter($('reset-memory'), resetMemory);
 
   document.addEventListener('keydown', (e) => {
+    if (VIEWER) return;
     if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('select, input, textarea')) return;
     switch (e.key.toLowerCase()) {
       case 'd': setDebug(!debug); break;
@@ -470,7 +533,7 @@
   startBtn.addEventListener('click', async () => {
     unlockSpeech();
     if (!navigator.mediaDevices?.getUserMedia) {
-      setStatus('no camera access: open http://localhost:8080 in Chrome, Safari or Firefox');
+      setStatus('no camera access: the camera needs HTTPS (or http://localhost on the laptop)');
       return;
     }
     try {
@@ -492,6 +555,7 @@
     renderPhase();
     listCameras();
     keepAwake();
+    if (pocketDefault) setPocket(true);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') keepAwake();
     });
@@ -499,6 +563,52 @@
     renderStats();
   });
 
+  // ---- Mirror (/phonelook) ----
+
+  async function startViewer() {
+    const img = el('img');
+    img.id = 'remote';
+    img.alt = 'What the phone sees';
+    preview.prepend(img);
+    preview.style.aspectRatio = '1 / 1';
+    preview.classList.add('portrait'); // the phone sends the center square, so fill the width with it
+    document.body.classList.add('live');
+    let shown = null;
+
+    async function poll() {
+      try {
+        const d = await (await fetch('/api/phonelook', { cache: 'no-store' })).json();
+        const c = d.client;
+        live = !!d.frame;
+        if (d.frame && d.frame !== shown) { shown = d.frame; img.src = 'data:image/jpeg;base64,' + d.frame; }
+        if (c) {
+          scan = { phase: 'searching', progress: 0, target: null, ...c.scan };
+          inFlight = !!c.inFlight;
+          result = c.result;
+          lastResult = c.lastResult || '';
+          lastObjects = c.objects || [];
+          Object.assign(stats, c.stats);
+        }
+        drawTracking(d.detections || []);
+        if (scan.phase === 'sent' && lastObjects.length) drawDecisions(lastObjects); else clearDecisions();
+        renderPhase();
+        setStatus(!d.frame ? 'waiting for the phone…'
+          : d.age_s > 2 ? 'no new frames for ' + Math.round(d.age_s) + ' s (phone asleep, or pricing an item)'
+            : statusText());
+        renderStats();
+      } catch (_) {
+        setStatus('backend unreachable');
+      }
+      setTimeout(poll, VIEW_POLL_MS);
+    }
+    poll();
+  }
+
   LogView.mount($('log'), { active: false });
-  setDebug(initialDebug());
+  if (VIEWER) {
+    setDebug(true);
+    startViewer();
+  } else {
+    setDebug(initialDebug());
+  }
 })();

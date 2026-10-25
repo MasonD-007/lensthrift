@@ -12,6 +12,7 @@
   <span class="brand">Thrift Lens</span>
   <span class="top-actions">
     <button id="test-sound" type="button" title="Play a sample whisper (T)">Test sound</button>
+    <button id="pocket-btn" type="button" title="Black out the screen (hold 1.5 s to leave)">Pocket</button>
     <button id="debug-toggle" type="button" aria-pressed="false" title="Debug view (D)">Debug</button>
   </span>
 </header>
@@ -41,6 +42,7 @@
   </section>
   <aside id="log" class="debug-only" aria-label="Decision log"></aside>
 </main>
+<div id="pocket" hidden aria-hidden="true"></div>
 <canvas id="canvas" hidden></canvas>
 <script src="log.js"></script>
 <script src="stabilize.js"></script>

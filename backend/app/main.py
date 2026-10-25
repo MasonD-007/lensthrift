@@ -5,6 +5,7 @@ from functools import lru_cache, partial
 from pathlib import Path
 from typing import List, Optional
 
+import base64
 import io
 import logging
 import json
@@ -12,10 +13,14 @@ import time
 from logging.handlers import RotatingFileHandler
 
 import httpx
+from urllib.parse import unquote
+
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from google import genai
 from PIL import Image
 from ultralytics import YOLO
+from fastapi.responses import FileResponse
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from .comps import load_comps
@@ -25,6 +30,7 @@ from .jev import resalable_score
 from .memory import Memory
 from .models import Detection, ObjectResult
 from .pipeline import Pipeline
+from .tts import MAX_CHARS, TTSError, synthesize
 
 LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
@@ -50,6 +56,7 @@ yolo = YOLO(YOLO_MODEL)
 
 app = FastAPI(title="Thrift Lens")
 log: deque[dict] = deque(maxlen=LOG_SIZE)  # newest first
+latest_look: dict = {}  # newest frame the phone sent to /api/detect, for the /phonelook page
 last_frame: dict = {}  # most recent /api/frame outcome, shown on the judge page
 
 
@@ -158,11 +165,62 @@ async def frame(
     return {"speak": line, "objects": rows}
 
 
+MAX_STATE_CHARS = 6000  # the phone's UI state rides along on each detect request as a header
+
+
+def parse_client_state(raw: Optional[str]) -> Optional[dict]:
+    """The phone's debug-view state (URL-encoded JSON in X-Lens-State), or None when absent or malformed."""
+    if not raw or len(raw) > MAX_STATE_CHARS:
+        return None
+    try:
+        state = json.loads(unquote(raw))
+    except ValueError:
+        return None
+    return state if isinstance(state, dict) else None
+
+
 @app.post("/api/detect")
 async def detect(request: Request) -> list[dict]:
     """YOLO boxes for the preview overlay, normalized to 0-1 of the sent frame."""
-    img = decode(await request.body())
-    return [{"label": d.label, "conf": d.conf, "box": list(d.box)} for d in yolo_detect(img)]
+    body = await request.body()
+    img = decode(body)
+    found = await run_in_threadpool(yolo_detect, img)  # keep inference off the event loop
+    dets = [{"label": d.label, "conf": d.conf, "box": list(d.box)} for d in found]
+    latest_look.update(jpeg=body, detections=dets, at=time.monotonic(),
+                       client=parse_client_state(request.headers.get("x-lens-state")))
+    return dets
+
+
+@app.get("/api/phonelook")
+def phonelook_data() -> dict:
+    """What the phone sees right now: its newest frame (base64 JPEG), the YOLO boxes and the last pipeline status."""
+    jpeg = latest_look.get("jpeg")
+    return {
+        "frame": base64.b64encode(jpeg).decode() if jpeg else None,
+        "detections": latest_look.get("detections", []),
+        "age_s": round(time.monotonic() - latest_look["at"], 2) if jpeg else None,
+        "status": last_frame,
+        "client": latest_look.get("client"),
+    }
+
+
+@app.get("/api/tts")
+async def tts(text: str = "") -> Response:
+    """Spoken line as WAV for the phone's <audio> element."""
+    text = text.strip()
+    if not text or len(text) > MAX_CHARS:
+        raise HTTPException(400, f"text must be 1 to {MAX_CHARS} characters")
+    try:
+        audio = await synthesize(text)
+    except TTSError as e:
+        logger.warning("tts failed: %s", e)
+        raise HTTPException(503, str(e))
+    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/phonelook", include_in_schema=False)
+def phonelook_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "phonelook.html")
 
 
 @app.get("/api/status")

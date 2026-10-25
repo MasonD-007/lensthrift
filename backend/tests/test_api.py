@@ -1,4 +1,5 @@
 import io
+import json
 from functools import lru_cache
 
 import pytest
@@ -178,3 +179,66 @@ def test_frame_with_bad_box_returns_400(client):
     use(FakePipeline("", []))
     for box in ("1,2,3", "0.5,0.5,0.2,0.9", "a,b,c,d", "0,0,1.5,1"):
         assert client.post(f"/api/frame?box={box}", content=jpeg_bytes()).status_code == 400, box
+
+
+def test_phonelook_empty_before_any_frame(client):
+    main.latest_look.clear()
+    body = client.get("/api/phonelook").json()
+    assert body["frame"] is None and body["detections"] == []
+
+
+def test_detect_stores_latest_frame_for_phonelook(client, monkeypatch):
+    import base64
+
+    monkeypatch.setattr(main, "yolo_detect", lambda img: [Detection("cup", 0.9, (0.1, 0.2, 0.5, 0.6))])
+    jpeg = jpeg_bytes()
+    assert client.post("/api/detect", content=jpeg).status_code == 200
+    body = client.get("/api/phonelook").json()
+    assert base64.b64decode(body["frame"]) == jpeg
+    assert body["detections"] == [{"label": "cup", "conf": 0.9, "box": [0.1, 0.2, 0.5, 0.6]}]
+    assert body["age_s"] < 5
+    assert body["status"] == main.last_frame
+
+
+def test_phonelook_page_is_served(client):
+    r = client.get("/phonelook")
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+
+
+def test_tts_returns_wav(client, monkeypatch):
+    async def fake(text):
+        assert text == "40 to 60 dollars, bowl."
+        return b"RIFFxxxxWAVE"
+
+    monkeypatch.setattr(main, "synthesize", fake)
+    r = client.get("/api/tts", params={"text": "40 to 60 dollars, bowl."})
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/wav"
+    assert r.content == b"RIFFxxxxWAVE"
+
+
+def test_tts_rejects_empty_and_long_text(client):
+    assert client.get("/api/tts", params={"text": "  "}).status_code == 400
+    assert client.get("/api/tts", params={"text": "x" * 301}).status_code == 400
+
+
+def test_tts_unavailable_returns_503(client, monkeypatch):
+    async def boom(text):
+        raise main.TTSError("macOS `say` not found")
+
+    monkeypatch.setattr(main, "synthesize", boom)
+    assert client.get("/api/tts", params={"text": "hi"}).status_code == 503
+
+
+def test_detect_keeps_phone_state_header_for_phonelook(client, monkeypatch):
+    from urllib.parse import quote
+
+    monkeypatch.setattr(main, "yolo_detect", lambda img: [])
+    state = {"scan": {"phase": "stabilizing", "progress": 0.4}, "stats": {"sent": 3}}
+    client.post("/api/detect", content=jpeg_bytes(), headers={"X-Lens-State": quote(json.dumps(state))})
+    assert client.get("/api/phonelook").json()["client"] == state
+
+
+def test_detect_ignores_malformed_phone_state(client, monkeypatch):
+    monkeypatch.setattr(main, "yolo_detect", lambda img: [])
+    client.post("/api/detect", content=jpeg_bytes(), headers={"X-Lens-State": "%7Bnot-json"})
+    assert client.get("/api/phonelook").json()["client"] is None

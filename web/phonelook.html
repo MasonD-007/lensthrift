@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<title>Thrift Lens Phone Look</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="capture viewer">
+<header class="topbar">
+  <span class="brand">Thrift Lens · phone look</span>
+  <span class="top-actions">
+    <button id="test-sound" type="button" title="Play a sample whisper (T)">Test sound</button>
+    <button id="pocket-btn" type="button" title="Black out the screen (hold 1.5 s to leave)">Pocket</button>
+    <button id="debug-toggle" type="button" aria-pressed="false" title="Debug view (D)">Debug</button>
+  </span>
+</header>
+<main class="layout">
+  <section class="stage">
+    <div id="preview">
+      <video id="video" playsinline muted autoplay></video>
+      <div id="square"><canvas id="boxes"></canvas><canvas id="decisions"></canvas></div>
+      <div id="phase" data-phase="searching" hidden aria-live="polite">
+        <span id="phase-text">Searching</span><span class="phase-bar"><span id="phase-fill"></span></span>
+      </div>
+    </div>
+    <button id="start" type="button">Start</button>
+    <p id="caption" aria-live="polite"></p>
+    <p id="status"></p>
+    <div class="panel debug-only">
+      <dl id="stats"></dl>
+      <div class="controls">
+        <button id="send-now" type="button" title="Space">Send now</button>
+        <button id="mute" type="button" aria-pressed="false" title="M">Mute</button>
+        <button id="replay" type="button" title="R">Replay</button>
+        <button id="reset-memory" type="button" title="Forget cached quotes and the 30 s cooldown">Reset memory</button>
+        <select id="camera" aria-label="Camera"></select>
+      </div>
+      <p class="keys">D debug · Space send now · M mute · R replay · T test sound · debug mode plays short tones for each result</p>
+    </div>
+  </section>
+  <aside id="log" class="debug-only" aria-label="Decision log"></aside>
+</main>
+<div id="pocket" hidden aria-hidden="true"></div>
+<canvas id="canvas" hidden></canvas>
+<script src="log.js"></script>
+<script src="stabilize.js"></script>
+<script src="capture.js"></script>
+</body>
+</html>

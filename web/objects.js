@@ -5,6 +5,7 @@
   const empty = document.getElementById('empty');
   const count = document.getElementById('count');
   let lastId = 0;
+  let boot = '';
   let total = 0;
 
   function append(entries) {
@@ -28,8 +29,20 @@
 
   async function poll() {
     try {
-      const r = await fetch('/api/seen?after=' + lastId);
-      if (r.ok) append(await r.json());
+      const r = await fetch('/api/seen?after=' + lastId + '&boot=' + encodeURIComponent(boot));
+      if (r.ok) {
+        const serverBoot = r.headers.get('X-Seen-Boot') || '';
+        if (serverBoot !== boot) { // the server restarted: its ids start over, so drop what we showed
+          boot = serverBoot;
+          lastId = 0;
+          total = 0;
+          list.replaceChildren();
+          list.hidden = true;
+          empty.hidden = false;
+          count.textContent = '';
+        }
+        append(await r.json());
+      }
     } catch (_) { /* backend restarting; try again */ }
     setTimeout(poll, POLL_MS);
   }

@@ -11,6 +11,7 @@ import itertools
 import logging
 import json
 import time
+import uuid
 from logging.handlers import RotatingFileHandler
 
 import httpx
@@ -64,6 +65,7 @@ last_frame: dict = {}  # most recent /api/frame outcome, shown on the judge page
 SEEN_GAP_S = 1.0  # rescanning appends again; only an object held in view (seen within this gap) is not repeated
 seen: deque[dict] = deque(maxlen=500)
 seen_ids = itertools.count(1)
+BOOT_ID = uuid.uuid4().hex  # ids restart with the server; clients holding another boot id start over
 last_seen: dict[str, float] = {}
 
 
@@ -217,9 +219,16 @@ async def detect(request: Request) -> list[dict]:
 
 
 @app.get("/api/seen")
-def get_seen(after: int = 0) -> list[dict]:
-    """Detected objects with id greater than `after`, oldest first."""
-    return [s for s in seen if s["id"] > after]
+def get_seen(response: Response, after: int = 0, boot: str = "") -> list[dict]:
+    """Detected objects with id greater than `after`, oldest first.
+
+    A client sending another server's `boot` gets the whole feed: its `after` came from a previous run.
+    """
+    response.headers["X-Seen-Boot"] = BOOT_ID
+    if boot and boot != BOOT_ID:
+        after = 0
+    # detect appends on the event loop while this runs in a worker thread: iterate a snapshot.
+    return [s for s in list(seen) if s["id"] > after]
 
 
 @app.get("/api/phonelook")

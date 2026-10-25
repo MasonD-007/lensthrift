@@ -102,3 +102,10 @@ body.pocket { overflow: hidden; }
 body.viewer .top-actions, body.viewer #start, body.viewer .controls, body.viewer .keys,
 body.viewer #video, body.viewer #pocket { display: none !important; }
 #remote { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* Objects feed (objects.html) */
+#empty { color: #666; padding: 2rem 0; }
+.objects { font-size: 1.6rem; line-height: 1.8; color: #ddd; margin: 0; }
+.object + .object::before { content: ", "; color: #666; }
+.object.fresh { color: #7e9; transition: color 1s; }
+.object { transition: color 1s; }

@@ -18,13 +18,27 @@ To reduce motion blur, the camera focuses on the center and caps exposure at 1/6
 
 Captures go to `Documents/captures/<time>-s<score>.jpg`. The in-app gallery shows each capture's gap from the previous one and its sharpness score. They're also in the Files app under **On My iPhone → Thrift Lens**. Saving pauses while live; see below.
 
+## Run on this iPhone (default): no Mac, no hotspot
+
+Settings (the iPhone button, bottom right) → **Run on: This iPhone**. The whole pipeline then runs on the phone and works on any Wi-Fi or cellular:
+
+- **YOLO** runs with Core ML (`Models/yolo11n.mlpackage`, exported from `backend/yolo11n.pt` at 320px with NMS). No network calls for detection.
+- **Jev and Gemini** are called straight from the phone by `OnDevicePipeline`, a Swift port of `backend/app/` (crops, Jev question, Gemini price prompt, `comps.json`, decide rule, 30 s cooldown, spoken line). `backend/comps.json` is bundled into the app at build time. Keep the port in sync when the backend changes.
+- **Gemini thinking is off** (`thinkingBudget: 0`). With the default thinking, one grounded price took 38–90 s; with it off, 5–6 s (same tie photo, same key). Confidence comes back lower (0.35–0.8), so more finds may stay quiet as "low confidence".
+- Jev and Gemini start at the same time, and the crop comes from the same 640px square the web sends.
+- The status bar's stopwatch line shows where the time went, e.g. `Jev 640 ms · Gemini 5.4 s`.
+
+**Keys:** paste the Gemini and TypeSafe keys in Settings. They're stored in this iPhone's Keychain only, never in code, git or the app bundle. Anyone holding the built app on a device could still extract them, so don't distribute builds outside the team.
+
+**Mac backend** is still available in Settings (**Run on: Mac backend**); the sections below describe that mode.
+
 ## YOLO boxes
 
 While live, the app sends the newest frame's center square (320px JPEG, same as the web client) to `POST /api/detect`, pausing 100 ms after each reply, and draws the returned boxes over the preview. The dashed square shows what YOLO sees. The status bar shows the box count and round-trip time, and the server button's dot turns green when detection works.
 
 ## Pricing and speech
 
-The phone sends `/api/frame` the same request as the web client. `Stabilizer` (a port of `web/stabilize.js`; keep the two in sync) feeds on every YOLO result, ignores people, and picks the object nearest the middle (bigger wins). Once that object has been held for 2 s, the center square (640px, 70% quality, same as the web) goes to `POST /api/frame?box=…&label=…&conf=…`, so the backend prices only that object. A held object is sent once; take it out of view and back to rescan. The target's box is orange while holding and green once sent. A non-empty `speak` reply is read aloud by `Speaker` with the phone's built-in voice (`AVSpeechSynthesizer`, premium or enhanced English voice when installed), with the silent switch on and through earbuds. Quiet replies show the item and reason, e.g. "Quiet · sunscreen $3–7 (resale does not beat tag)".
+The phone sends `/api/frame` the same request as the web client. `Stabilizer` (based on `web/stabilize.js`) feeds on every YOLO result, ignores people, and picks the object nearest the middle (bigger wins). It follows that object frame to frame, so swaying doesn't restart it, and tolerates 1 s of missed detections. Once the object has stayed in view for 0.5 s (the web waits 2 s), the center square (640px, 70% quality, same as the web) goes to `POST /api/frame?box=…&label=…&conf=…`, so the backend prices only that object. A held object is sent once; take it out of view and back to rescan. The target's box is orange while holding and green once sent. A non-empty `speak` reply is read aloud by `Speaker` with the phone's built-in voice (`AVSpeechSynthesizer`, premium or enhanced English voice when installed), with the silent switch on and through earbuds. Quiet replies show the item and reason, e.g. "Quiet · sunscreen $3–7 (resale does not beat tag)".
 
 While live, detection runs again 100 ms after each reply (the web's `DETECT_MS`), and gallery saving and its sharpness scoring are paused so the phone spends its time on detection and pricing. The status bar shows detections per second; measured on an iPhone 15 Pro over a hotspot: about 7/s, versus about 8/s for the web client on localhost.
 

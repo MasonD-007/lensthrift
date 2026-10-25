@@ -23,6 +23,9 @@ targets:
     platform: iOS
     sources:
       - LensThrift
+      # Same demo comps the backend uses, so on-phone pricing overrides and tags match.
+      - path: ../../backend/comps.json
+        buildPhase: resources
     dependencies:
       - package: HaishinKit
         product: HaishinKit

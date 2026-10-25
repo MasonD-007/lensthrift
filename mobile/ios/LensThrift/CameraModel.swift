@@ -15,6 +15,15 @@ final class CameraModel: ObservableObject {
 
     var source: Source = .sharpestFrame
 
+    /// Where detection and pricing run. Set in Settings; `.phone` needs no Mac or hotspot.
+    enum Engine: String {
+        case phone, backend
+    }
+    static let engineKey = "engine"
+    var engine: Engine {
+        Engine(rawValue: UserDefaults.standard.string(forKey: Self.engineKey) ?? "") ?? .phone
+    }
+
     @Published private(set) var isLive = false
     @Published private(set) var cameraAvailable = true
     @Published private(set) var status = "Starting camera…"
@@ -35,6 +44,8 @@ final class CameraModel: ObservableObject {
     /// What the pipeline last said, or why it stayed quiet.
     @Published private(set) var lastReply: String?
     @Published private(set) var frameLatencyMs: Int?
+    /// Where the pricing time went, e.g. "Jev 640 ms · Gemini 12.3 s" (on-phone engine only).
+    @Published private(set) var stageTimings: String?
 
     /// The backend wants about one frame per second (see Plan.md).
     static let interval: Duration = .seconds(1)
@@ -55,6 +66,8 @@ final class CameraModel: ObservableObject {
     private var isPricing = false
     private let speaker = Speaker()
     private var stabilizer = Stabilizer()
+    private let detector = try? OnDeviceDetector()
+    private let pipeline = OnDevicePipeline()
 
     func start() async {
         guard await AVCaptureDevice.requestAccess(for: .video) else {
@@ -112,19 +125,32 @@ final class CameraModel: ObservableObject {
     private func detectLoop() async {
         while !Task.isCancelled {
             let started = ContinuousClock.now
-            guard let client = BackendClient() else {
+            let engine = engine
+            let client = BackendClient()
+            if engine == .backend, client == nil {
                 backendError = "Set the backend URL"
+                try? await Task.sleep(for: .seconds(1))
+                continue
+            }
+            if engine == .phone, detector == nil {
+                backendError = "On-device YOLO failed to load"
                 try? await Task.sleep(for: .seconds(1))
                 continue
             }
             if let frame = picker.latestFrame() {
                 let size = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
                 do {
-                    let jpeg = await Task.detached(priority: .userInitiated) {
-                        CaptureStore.squareJPEG(pixelBuffer: frame, side: Self.detectSide)
-                    }.value
-                    guard let jpeg else { throw CocoaError(.fileWriteUnknown) }
-                    let boxes = try await client.detect(jpeg: jpeg)
+                    let boxes: [Detection]
+                    if engine == .phone, let detector {
+                        // Core ML on the phone: no network, so no waiting on Wi-Fi.
+                        boxes = try await Task.detached(priority: .userInitiated) { try detector.detect(frame) }.value
+                    } else {
+                        let jpeg = await Task.detached(priority: .userInitiated) {
+                            CaptureStore.squareJPEG(pixelBuffer: frame, side: Self.detectSide)
+                        }.value
+                        guard let jpeg, let client else { throw CocoaError(.fileWriteUnknown) }
+                        boxes = try await client.detect(jpeg: jpeg)
+                    }
                     guard !Task.isCancelled else { return }
                     detections = boxes
                     detectFrameSize = size
@@ -138,13 +164,23 @@ final class CameraModel: ObservableObject {
                 } catch {
                     guard !Task.isCancelled else { return }
                     detections = []
-                    backendError = "Backend unreachable: \(client.baseURL.host() ?? "?")"
+                    backendError = engine == .phone ? "On-device YOLO failed: \(error.localizedDescription)"
+                        : "Backend unreachable: \(client?.baseURL.host() ?? "?")"
                     try? await Task.sleep(for: .seconds(1))
                     continue
                 }
             }
             try? await Task.sleep(for: Self.detectPause)
         }
+    }
+
+    /// Called after Settings saves: restart detection on the chosen engine and forget old results.
+    func settingsChanged() {
+        objectWillChange.send()
+        detections = []
+        lastReply = Keys.isSet || engine == .backend ? nil : "Add your Gemini and TypeSafe keys in Settings"
+        backendError = nil
+        if isLive { setLive(true) }
     }
 
     func refreshCount() {
@@ -181,7 +217,7 @@ final class CameraModel: ObservableObject {
         }
     }
 
-    /// Feeds each YOLO result to the stabilizer; once one object has been held for 2 s, prices it.
+    /// Feeds each YOLO result to the stabilizer; once one object has been held for `Stabilizer.holdS`, prices it.
     private func track(_ boxes: [Detection], frame: CVPixelBuffer) {
         let wasSent = scan.phase == .sent
         scan = stabilizer.update(boxes, now: ProcessInfo.processInfo.systemUptime)
@@ -201,25 +237,38 @@ final class CameraModel: ObservableObject {
     /// The box is normalized to the center square, the same square /api/detect saw.
     private func price(_ target: Detection, frame: CVPixelBuffer) async {
         defer { isPricing = false }
-        guard let client = BackendClient() else { return }
-        let jpeg = await Task.detached(priority: .userInitiated) {
-            CaptureStore.squareJPEG(pixelBuffer: frame, side: Self.frameSide, quality: Self.frameQuality)
-        }.value
-        guard let jpeg else { return }
         lastReply = "Pricing \(target.label)…"
+        stageTimings = nil
         let started = ContinuousClock.now
         do {
-            let reply = try await client.frame(jpeg: jpeg, target: target)
-            frameLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
-            if reply.speak.isEmpty {
-                let o = reply.objects.first
-                lastReply = "Quiet · " + (o.map { $0.summary + ($0.reason.map { " (\($0))" } ?? "") } ?? "nothing to price")
+            let speak: String
+            let object: BackendClient.FrameObject?
+            if engine == .phone {
+                // The phone runs Jev and Gemini itself on a full-resolution crop of the target.
+                let result = try await pipeline.process(frame: frame, target: target)
+                speak = result.speak
+                object = result.object
+                stageTimings = result.timings
             } else {
-                lastReply = "“\(reply.speak)”"
+                guard let client = BackendClient() else { return }
+                let jpeg = await Task.detached(priority: .userInitiated) {
+                    CaptureStore.squareJPEG(pixelBuffer: frame, side: Self.frameSide, quality: Self.frameQuality)
+                }.value
+                guard let jpeg else { return }
+                let reply = try await client.frame(jpeg: jpeg, target: target)
+                speak = reply.speak
+                object = reply.objects.first
+            }
+            frameLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
+            if speak.isEmpty {
+                lastReply = "Quiet · " + (object.map { $0.summary + ($0.reason.map { " (\($0))" } ?? "") } ?? "nothing to price")
+            } else {
+                lastReply = "“\(speak)”"
                 // Capture may have been stopped while the reply was on its way.
-                if isLive { speaker.say(reply.speak) }
+                if isLive { speaker.say(speak) }
             }
         } catch {
+            frameLatencyMs = Int((ContinuousClock.now - started) / .milliseconds(1))
             lastReply = "Pricing failed: \(error.localizedDescription)"
         }
     }

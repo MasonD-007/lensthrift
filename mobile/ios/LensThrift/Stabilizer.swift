@@ -1,15 +1,20 @@
 import Foundation
 
-/// Picks one object to scan and waits until it has been held steady for about 2 seconds.
+/// Picks one object to scan and waits until it has stayed in view for half a second.
 ///
-/// A Swift port of `web/stabilize.js`, so the phone and the web page send the backend the
-/// same thing. Keep the constants and rules in sync with that file.
+/// Started as a port of `web/stabilize.js` (same target choice: ignore people, nearest the
+/// middle, bigger wins), but tuned for a chest-mounted phone, which sways far more than a
+/// laptop webcam. Differences from the web version:
+/// - Holds 0.5 s instead of 2 s.
+/// - Follows the object frame to frame (overlap with its last box, or same label nearby)
+///   instead of comparing against where it was first seen, so drift doesn't restart the count.
+/// - Tolerates 1 s of missed detections instead of 0.5 s (blur, the item turning).
 struct Stabilizer {
-    static let holdS: TimeInterval = 2       // object must stay put this long before the frame is sent
-    static let minIoU = 0.5                  // overlap with where the object was first seen; less means it moved
-    static let maxGapS: TimeInterval = 0.5   // YOLO can miss a frame or two; longer than this means it left
-    static let switchMargin = 0.1            // another object must score this much better to take over
-    static let movedDist = 0.35              // same label this close to where it was: the object moved, not a new one
+    static let holdS: TimeInterval = 0.5     // object must stay in view this long before the frame is sent (web: 2 s)
+    static let minIoU = 0.3                  // overlap with its last box that still counts as the same object
+    static let maxGapS: TimeInterval = 1.0   // YOLO can miss a few frames (blur, turning); longer means it left (web: 0.5 s)
+    static let switchMargin = 0.15           // another object must score this much better to take over (web: 0.1)
+    static let followDist = 0.35             // same label within this distance of its last box: same object, it moved
     static let centerWeight = 0.6            // "ideally in the middle"
     static let sizeWeight = 0.4              // "closer wins": closer objects are bigger in the frame
     static let ignore: Set<String> = ["person"] // the hand and body holding the item
@@ -25,7 +30,6 @@ struct Stabilizer {
     }
 
     private struct Track {
-        var anchor: [Double]
         var target: Detection
         var since: TimeInterval
         var lastSeen: TimeInterval
@@ -38,19 +42,20 @@ struct Stabilizer {
     mutating func update(_ dets: [Detection], now: TimeInterval) -> Scan {
         let ranked = Self.candidates(dets)
         let best = ranked.first
-        let same = track.flatMap { t in ranked.first { Self.iou(t.anchor, $0.box) >= Self.minIoU } }
-        let moved = track.flatMap { t in
-            same == nil ? ranked.first { $0.label == t.target.label && Self.centerDist($0.box, t.target.box) < Self.movedDist } : nil
+        // Follow the tracked object: overlaps its last box, or the same label close by (it drifted).
+        // Prefer the same label, so an overlapping neighbor doesn't take over the count.
+        let same = track.flatMap { t in
+            ranked.first { $0.label == t.target.label && Self.iou(t.target.box, $0.box) >= Self.minIoU }
+                ?? ranked.first { Self.iou(t.target.box, $0.box) >= Self.minIoU }
+                ?? ranked.first { $0.label == t.target.label && Self.centerDist($0.box, t.target.box) < Self.followDist }
         }
         func start(_ d: Detection) {
-            track = Track(anchor: d.box, target: d, since: now, lastSeen: now, sent: false)
+            track = Track(target: d, since: now, lastSeen: now, sent: false)
         }
 
         if let same, !(best.map { $0.id != same.id && Self.score($0.box) - Self.score(same.box) > Self.switchMargin } ?? false) {
-            track?.target = same // keep the newest box and label (YOLO labels flicker)
+            track?.target = same // keep the newest box and label (YOLO labels flicker); the count keeps going
             track?.lastSeen = now
-        } else if let moved {
-            start(moved)
         } else if let t = track, same == nil, now - t.lastSeen <= Self.maxGapS {
             // brief miss: keep counting on the last box we saw
         } else if let best {

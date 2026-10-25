@@ -4,8 +4,7 @@ import SwiftUI
 struct CaptureView: View {
     @StateObject private var camera = CameraModel()
     @State private var showGallery = false
-    @State private var showBackend = false
-    @State private var backendURL = BackendClient.savedURL
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -35,15 +34,8 @@ struct CaptureView: View {
         .sheet(isPresented: $showGallery) {
             GalleryView { camera.refreshCount() }
         }
-        .alert("Backend URL", isPresented: $showBackend) {
-            TextField("http://192.168.1.10:8080", text: $backendURL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-            Button("Save") { BackendClient.savedURL = backendURL }
-            Button("Cancel", role: .cancel) { backendURL = BackendClient.savedURL }
-        } message: {
-            Text("Where `make run` is serving, or its tunnel URL.")
+        .sheet(isPresented: $showSettings) {
+            SettingsView { camera.settingsChanged() }
         }
     }
 
@@ -76,6 +68,9 @@ struct CaptureView: View {
                     }
                     if let phase = phaseText {
                         Label(phase, systemImage: "scope")
+                    }
+                    if let timings = camera.stageTimings {
+                        Label(timings, systemImage: "stopwatch")
                     }
                     if let reply = camera.lastReply {
                         Label(reply + (camera.frameLatencyMs.map { " · \($0) ms" } ?? ""), systemImage: "speaker.wave.2")
@@ -135,10 +130,9 @@ struct CaptureView: View {
             .disabled(!camera.cameraAvailable)
 
             Button {
-                backendURL = BackendClient.savedURL
-                showBackend = true
+                showSettings = true
             } label: {
-                Image(systemName: "server.rack")
+                Image(systemName: camera.engine == .phone ? "iphone.gen3" : "server.rack")
                     .font(.title2)
                     .frame(width: 56, height: 56)
                     .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
@@ -149,7 +143,7 @@ struct CaptureView: View {
                             .padding(6)
                     }
             }
-            .accessibilityLabel("Backend URL")
+            .accessibilityLabel("Settings")
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .tint(.white)

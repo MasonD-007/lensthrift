@@ -6,8 +6,6 @@ Built at the **cOmpiled-16 / UCSD hackathon** in San Diego, October 2026, for th
 
 **[Watch the demo](https://www.youtube.com/watch?v=-nqxK2U75vo)**
 
-[![Thrift Lens demo](https://img.youtube.com/vi/-nqxK2U75vo/hqdefault.jpg)](https://www.youtube.com/watch?v=-nqxK2U75vo)
-
 ## How it works
 
 ```
